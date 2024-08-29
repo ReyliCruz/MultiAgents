@@ -23,7 +23,7 @@ def agent_portrayal(agent):
 
 
 grid = mesa.visualization.CanvasGrid(
-    agent_portrayal, 20, 20, 400, 400)
+    agent_portrayal, 30, 30, 550, 550)
 
 # Create a chart to track the battery of the robots
 chart_charges = mesa.visualization.ChartModule(

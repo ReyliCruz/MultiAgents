@@ -10,7 +10,7 @@ class Bot(Agent):
     # Define the movements (0: down, 1: right, 2: up, 3: left)
     MOVEMENTS = [(0, 1), (1, 0), (0, -1), (-1, 0)]
 
-    def __init__(self, unique_id, model, q_file=None):
+    def __init__(self, unique_id, model, q_file=None, target_goal_name=None):
         super().__init__(unique_id, model)
         self.q_values = None
         self.done = False
@@ -21,6 +21,7 @@ class Bot(Agent):
         self.total_return = 0
         self.training_step = 0
         self.movements = 0
+        self.target_goal_name = target_goal_name
 
         self.epsilon = 0.1
         self.alpha = 0.1
@@ -51,7 +52,11 @@ class Bot(Agent):
 
     def advance(self) -> None:
         # Check if the agent can move to the next position
-        if self.model.grid.is_cell_empty(self.next_pos) or self.next_state in self.model.goal_states:
+        if self.model.grid.is_cell_empty(self.next_pos) or (
+            self.next_state in self.model.goal_states and 
+            any(isinstance(goal, Goal) and goal.name == self.target_goal_name 
+                for goal in self.model.grid.get_cell_list_contents(self.next_pos))
+        ):
             if self.next_state in self.model.goal_states:
                 # Remove the goal agent from the grid
                 self.model.grid.remove_agent(self.model.grid.get_cell_list_contents(self.next_pos)[0])
@@ -159,5 +164,6 @@ class Box(Agent):
 
 
 class Goal(Agent):
-    def __init__(self, unique_id, model):
+    def __init__(self, unique_id, model, name):
         super().__init__(unique_id, model)
+        self.name = name
