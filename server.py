@@ -8,7 +8,7 @@ BOT_COLORS = ["Red", "Blue", "Olive", "Black"]
 
 def agent_portrayal(agent):
     if isinstance(agent, Bot):
-        return {"Shape": "circle", "Filled": "false", "Color": BOT_COLORS[agent.unique_id - 1], "Layer": 1, "r": 1.0,
+        return {"Shape": "circle", "Filled": "false", "Color": "Black", "Layer": 1, "r": 1.0,
                 "text": "🤖", "text_color": "black"}
     elif isinstance(agent, Box):
         object_emoji = "📦"  #np.random.choice(["📦", "🗿", "🪨", "📚"])

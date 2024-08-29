@@ -10,7 +10,7 @@ class Bot(Agent):
     # Define the movements (0: down, 1: right, 2: up, 3: left)
     MOVEMENTS = [(0, 1), (1, 0), (0, -1), (-1, 0)]
 
-    def __init__(self, unique_id, model, q_file=None, target_goal_name=None):
+    def __init__(self, unique_id, model, q_file=None):
         super().__init__(unique_id, model)
         self.q_values = None
         self.done = False
@@ -21,7 +21,7 @@ class Bot(Agent):
         self.total_return = 0
         self.training_step = 0
         self.movements = 0
-        self.target_goal_name = target_goal_name
+        self.target_goal_name = ""
 
         self.epsilon = 0.1
         self.alpha = 0.1
@@ -53,7 +53,9 @@ class Bot(Agent):
     def advance(self) -> None:
 
         if self.target_goal_name == "":
+            print("Sin meta asignada")
             return
+        
         # Check if the agent can move to the next position
         if self.model.grid.is_cell_empty(self.next_pos) or (
             self.next_state in self.model.goal_states and 
@@ -86,7 +88,7 @@ class Bot(Agent):
         self.total_return += reward
 
     def save_q_values(self):
-        np.save(f"./q_values{self.unique_id}.npy", self.q_values)
+        np.save(f"./q_values{self.target_goal_name}.npy", self.q_values)
 
     def train(self):
         inital_pos = self.pos
@@ -107,9 +109,12 @@ class Bot(Agent):
                 next_pos = self.perform(pos, action)
                 next_state = self.model.states[next_pos]
 
-                reward = self.model.rewards[next_state]
+                #reward = self.model.rewards[next_state]
+                # Usar el diccionario de recompensas específico del bot
+                reward = self.rewards.get(next_state, -1)
 
-                if next_state in self.model.goal_states:
+                #if next_state in self.model.goal_states:
+                if next_state in self.model.goal_states and (any(isinstance(goal, Goal) and goal.name == self.target_goal_name for goal in self.model.grid.get_cell_list_contents(next_pos))):
                     done = True
 
                 self._update_q_values(state, action, reward, next_state)
@@ -170,3 +175,45 @@ class Goal(Agent):
     def __init__(self, unique_id, model, name):
         super().__init__(unique_id, model)
         self.name = name
+
+class TaskManager:
+    def __init__(self, environment):
+        """
+        Inicializa el TaskManager con una referencia al entorno.
+
+        Parameters:
+        - environment: Una instancia del modelo Environment.
+        """
+        self.environment = environment
+
+    def assign_goal_to_bot(self, bot_id, goal_name):
+        """
+        Asigna un objetivo específico a un bot basado en el ID del bot y el nombre de la meta.
+
+        Parameters:
+        - bot_id: Identificador único del bot.
+        - goal_name: Nombre de la meta a asignar al bot.
+        """
+        # Encontrar el bot con el ID especificado
+        bot = next((agent for agent in self.environment.schedule.agents if isinstance(agent, Bot) and agent.unique_id == bot_id), None)
+
+        # Buscar la meta con el nombre especificado en todas las celdas de la cuadrícula
+        goal = None
+        for cell in self.environment.grid.coord_iter():
+            contents, pos = cell
+            # Asegurarse de que contents es una lista de agentes
+            cell_contents = self.environment.grid.get_cell_list_contents(pos)
+            for agent in cell_contents:
+                if isinstance(agent, Goal) and agent.name == goal_name:
+                    goal = agent
+                    break
+            if goal:
+                break
+
+        if bot and goal:
+            # Asignar la meta al bot
+            bot.target_goal_name = goal_name
+            bot.rewards = {state: 1 if state == goal.pos else -1 for state in self.environment.states.values()}
+            print(f"Meta '{goal_name}' asignada al bot {bot_id}.")
+        else:
+            print(f"No se pudo asignar la meta. Verifique que el bot y la meta existan.")

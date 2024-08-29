@@ -1,9 +1,11 @@
 from mesa.model import Model
-from agent import Box, Goal, Bot
+from agent import Box, Goal, Bot, TaskManager
 
 from mesa.space import SingleGrid
 from mesa.time import SimultaneousActivation
 from mesa.datacollection import DataCollector
+
+from agent_collections import goals_collection, bots_collection
 
 import numpy as np
 
@@ -17,7 +19,7 @@ class Environment(Model):
         'BBBBBBBBBBBFFFFFFFFFFBBBBFFFFB',
         'BBBBBBBBBBBFFFFFFFFFFBBBBFFFFB',
         'BBBBBBBBBBBFFFFFFFFFFBBBBFFFFB',
-        'BBBBBBBBBBBFFFFFFFFFFBBBBFFFFB',
+        'BBBBBBBBBBBFFFFFFGFFFBBBBFFFFB',
         'BBBBBBBBBBBFFFFFFBBFFBBBBFFFFB',
         'BBBBBBBBBBBBBBFFFBBFFFFFFFFFFB',
         'BBBBBBBBBBBBBBFFFFFFFFFFFFFFFB',
@@ -31,7 +33,7 @@ class Environment(Model):
         'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
         'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
         'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
-        'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
+        'BFFFFFFFFFFFFFFFFFFFFFFFFFFF1B',
         'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
         'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
         'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
@@ -59,7 +61,7 @@ class Environment(Model):
         self.schedule = SimultaneousActivation(self)
 
         # Place agents in the environment
-        self.place_agents(desc)
+        self.add_box_from_map(desc)
 
         self.states = {}
         self.rewards = {}
@@ -72,33 +74,29 @@ class Environment(Model):
 
             # Define rewards for the environment
             if isinstance(a, Goal):
-                if a.name == "Salida":  # Aquí verificamos si es el objetivo que busca
-                    self.rewards[state] = 1  # Recompensa positiva si es el objetivo correcto
-                else:
-                    self.rewards[state] = -1  # Recompensa negativa si no es el objetivo correcto
-                self.goal_states.append(state)
+                self.rewards[state] = 1
             elif isinstance(a, Box):
                 self.rewards[state] = -1
             else:
                 self.rewards[state] = 0
 
-        # Llamar a la función para agregar metas adicionales con nombres
-        additional_goals = [
-            (3, 10, "Salida"),
-            (10, 10, "Rack"),
-            (15, 15, "Banda")
-        ]  
-        
-        # Ejemplo de coordenadas y nombres para metas adicionales
-        self.add_goals(additional_goals)
-        bot_details = [
-            (0, (28, 8), "Salida"),  # Bot con ID 1, en posición (1, 1), con objetivo "Salida"
-            (1, (27, 8), "Rack"),    # Bot con ID 2, en posición (2, 2), con objetivo "Rack"
-            (2, (26, 8), "")    # Bot con ID 3, en posición (3, 3), con objetivo "Banda"
-        ]
+        # Usar bucles for para agregar metas y bots
+        for goal_id, x, y, name in goals_collection:
+            self.add_goal(goal_id, x, y, name)
 
-        self.add_bots(bot_details)
-        
+        for bot_id, x, y in bots_collection:
+            self.add_robot(bot_id, x, y)
+
+        # Crear una instancia de TaskManager
+        self.task_manager = TaskManager(self)
+
+        # Ejemplo de asignación de metas a bots
+        self.task_manager.assign_goal_to_bot(101, "Salida")
+        self.task_manager.assign_goal_to_bot(102, "Rack")
+        self.task_manager.assign_goal_to_bot(103, "Banda")
+
+        self.assign_rewards()
+
         reporters = {
             f"Bot{i+1}": lambda m, i=i: m.schedule.agents[i].total_return for i in range(len(self.schedule.agents))
         }
@@ -106,46 +104,6 @@ class Environment(Model):
         self.datacollector = DataCollector(
             model_reporters=reporters
         )
-
-    def add_goals(self, goal_details):
-        """
-        Add additional goals to the environment at specified coordinates with specified names.
-        
-        Parameters:
-        - goal_details: List of tuples, each containing (x, y, name) representing the coordinates and name of the new goals.
-        """
-        for coord in goal_details:
-            x, y, name = coord
-            if self.grid.is_cell_empty((x, y)):
-                goal = Goal(int(f"10{x}{y}"), self, name=name)
-                self.grid.place_agent(goal, (x, y))
-
-                # Update states and rewards
-                state = self.states[(x, y)]
-                if name == "Salida":
-                    self.rewards[state] = 1  # Assign positive reward for the correct goal
-                else:
-                    self.rewards[state] = -1  # Assign negative reward for incorrect goals
-                self.goal_states.append(state)
-            else:
-                print(f"La celda {(x, y)} no está vacía. No se puede colocar una meta aquí.")
-
-    def add_bots(self, bot_details):
-        """
-        Inicializa y coloca bots en el entorno en posiciones específicas con objetivos específicos.
-
-        Parameters:
-        - bot_details: Lista de tuplas, cada una conteniendo (id, (x, y), target_goal_name) representando el
-                       identificador único del bot, la posición inicial y el nombre del objetivo.
-        """
-        for bot_id, (x, y), goal_name in bot_details:
-            if self.grid.is_cell_empty((x, y)):
-                bot = Bot(bot_id, self, target_goal_name=goal_name)
-                self.grid.place_agent(bot, (x, y))
-                self.schedule.add(bot)
-                print(f"Bot {bot_id} colocado en posición ({x}, {y}) con objetivo: {goal_name}")
-            else:
-                print(f"La celda ({x}, {y}) no está vacía. No se puede colocar el bot aquí.")
 
     def step(self):
         # Train the agents in the environment
@@ -160,24 +118,65 @@ class Environment(Model):
 
         self.running = not any([a.done for a in self.schedule.agents])
 
-    def place_agents(self, desc: list):
+    def add_box_from_map(self, desc: list):
+        """
+        Agrega cajas en las posiciones especificadas por el mapa ('B').
+
+        Parameters:
+        - desc: Mapa que describe la disposición inicial del entorno.
+        """
         M, N = self.grid.height, self.grid.width
         for pos in self.grid.coord_iter():
             _, (x, y) = pos
             if desc[M - y - 1][x] == 'B':
                 box = Box(int(f"1000{x}{y}"), self)
                 self.grid.place_agent(box, (x, y))
-            elif desc[M - y - 1][x] == 'G':
-                goal_name = f"Goal_{x}_{y}"
-                meta = Goal(int(f"10{x}{y}"), self, name=goal_name)
-                self.grid.place_agent(meta, (x, y))
-            else:
-                try:
-                    bot_num = int(desc[M - y - 1][x])
-                    target_goal_name = "Salida"
-                    bot = Bot(int(f"{bot_num}"), self, self._q_file, target_goal_name=target_goal_name)
-                    self.grid.place_agent(bot, (x, y))
-                    self.schedule.add(bot)
 
-                except ValueError:
-                    pass
+    def add_robot(self, bot_id, x, y):
+        """
+        Agrega un robot en las coordenadas especificadas.
+
+        Parameters:
+        - bot_id: Identificador único del robot.
+        - x: Coordenada x del robot.
+        - y: Coordenada y del robot.
+        """
+        if self.grid.is_cell_empty((x, y)):
+            bot = Bot(bot_id, self)
+            self.grid.place_agent(bot, (x, y))
+            self.schedule.add(bot)
+
+    def add_goal(self, goal_id, x, y, goal_name):
+        """
+        Agrega una meta en las coordenadas especificadas con un nombre.
+
+        Parameters:
+        - goal_id: Identificador único de la meta.
+        - x: Coordenada x de la meta.
+        - y: Coordenada y de la meta.
+        - goal_name: Nombre de la meta.
+        """
+        if self.grid.is_cell_empty((x, y)):
+            goal = Goal(goal_id, self, name=goal_name)
+            self.grid.place_agent(goal, (x, y))
+
+    def assign_rewards(self):
+        """
+        Asigna recompensas específicas para cada bot basado en su meta asignada.
+        """
+        for agent in self.schedule.agents:
+            if isinstance(agent, Bot):
+                agent.rewards = {}
+                for pos, state in self.states.items():  # Cambiar la iteración
+                    cell_agents = self.grid.get_cell_list_contents(pos)
+                    # Si es la meta asignada, recompensa positiva
+                    if any(isinstance(a, Goal) and a.name == agent.target_goal_name for a in cell_agents):
+                        agent.rewards[state] = 1
+                    # Si es otra meta, recompensa negativa
+                    elif any(isinstance(a, Goal) and a.name != agent.target_goal_name for a in cell_agents):
+                        agent.rewards[state] = -2
+                    # Caso general
+                    elif any(isinstance(a, Box) for a in cell_agents):
+                        agent.rewards[state] = -1
+                    else:
+                        agent.rewards[state] = 0
