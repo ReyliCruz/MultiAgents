@@ -31,7 +31,7 @@ class Environment(Model):
         'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
         'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
         'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
-        'BFFFFFFFFFFFFFFFFFFFFFFFFFFF1B',
+        'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
         'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
         'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
         'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
@@ -87,8 +87,17 @@ class Environment(Model):
             (3, 10, "Salida"),
             (10, 10, "Rack"),
             (15, 15, "Banda")
-        ]  # Ejemplo de coordenadas y nombres para metas adicionales
+        ]  
+        
+        # Ejemplo de coordenadas y nombres para metas adicionales
         self.add_goals(additional_goals)
+        bot_details = [
+            (0, (28, 8), "Salida"),  # Bot con ID 1, en posición (1, 1), con objetivo "Salida"
+            (1, (27, 8), "Rack"),    # Bot con ID 2, en posición (2, 2), con objetivo "Rack"
+            (2, (26, 8), "")    # Bot con ID 3, en posición (3, 3), con objetivo "Banda"
+        ]
+
+        self.add_bots(bot_details)
         
         reporters = {
             f"Bot{i+1}": lambda m, i=i: m.schedule.agents[i].total_return for i in range(len(self.schedule.agents))
@@ -121,6 +130,22 @@ class Environment(Model):
             else:
                 print(f"La celda {(x, y)} no está vacía. No se puede colocar una meta aquí.")
 
+    def add_bots(self, bot_details):
+        """
+        Inicializa y coloca bots en el entorno en posiciones específicas con objetivos específicos.
+
+        Parameters:
+        - bot_details: Lista de tuplas, cada una conteniendo (id, (x, y), target_goal_name) representando el
+                       identificador único del bot, la posición inicial y el nombre del objetivo.
+        """
+        for bot_id, (x, y), goal_name in bot_details:
+            if self.grid.is_cell_empty((x, y)):
+                bot = Bot(bot_id, self, target_goal_name=goal_name)
+                self.grid.place_agent(bot, (x, y))
+                self.schedule.add(bot)
+                print(f"Bot {bot_id} colocado en posición ({x}, {y}) con objetivo: {goal_name}")
+            else:
+                print(f"La celda ({x}, {y}) no está vacía. No se puede colocar el bot aquí.")
 
     def step(self):
         # Train the agents in the environment

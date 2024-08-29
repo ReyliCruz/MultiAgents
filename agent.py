@@ -51,6 +51,9 @@ class Bot(Agent):
         self.next_state = self.model.states[self.next_pos]
 
     def advance(self) -> None:
+
+        if self.target_goal_name == "":
+            return
         # Check if the agent can move to the next position
         if self.model.grid.is_cell_empty(self.next_pos) or (
             self.next_state in self.model.goal_states and 
