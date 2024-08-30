@@ -92,8 +92,8 @@ class Environment(Model):
 
         # Ejemplo de asignación de metas a bots
         self.task_manager.assign_goal_to_bot(101, "Salida")
-        self.task_manager.assign_goal_to_bot(102, "Banda")
-        #self.task_manager.assign_goal_to_bot(103, "Banda")
+        self.task_manager.assign_goal_to_bot(102, "Rack")
+        self.task_manager.assign_goal_to_bot(103, "Banda")
 
         self.assign_rewards()
 
@@ -106,6 +106,9 @@ class Environment(Model):
         )
 
     def step(self):
+                # Monitorea posibles colisiones antes de que los agentes tomen su paso
+        self.task_manager.monitor_bots()
+
         # Train the agents in the environment
         if self.train and self._q_file is not None:
             for agent in self.schedule.agents:
@@ -116,7 +119,8 @@ class Environment(Model):
 
         self.schedule.step()
 
-        self.running = not any([a.done for a in self.schedule.agents])
+        #self.running = not any([a.done for a in self.schedule.agents])
+        self.running = True
 
     def add_box_from_map(self, desc: list):
         """

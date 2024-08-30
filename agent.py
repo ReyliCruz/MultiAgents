@@ -23,6 +23,7 @@ class Bot(Agent):
         self.movements = 0
         self.target_goal_name = ""
         self.rewards = {}
+        self.visible_goal = True
 
         self.epsilon = 0.1
         self.alpha = 0.1
@@ -220,3 +221,31 @@ class TaskManager:
             print(f"Meta '{bot.target_goal_name}' asignada al bot {bot.unique_id}.")
         else:
             print(f"No se pudo asignar la meta. Verifique que el bot y la meta existan.")
+
+    def monitor_bots(self):
+        """
+        Monitorea a los bots para detectar colisiones en sus próximos pasos y previene que ocurra la colisión.
+        """
+        bots = [agent for agent in self.environment.schedule.agents if isinstance(agent, Bot)]
+        next_positions = {}
+
+        # Obtener las próximas posiciones de cada bot
+        for bot in bots:
+            if bot.action is not None:
+                next_pos = bot.perform(bot.pos, bot.action)
+                if next_pos in next_positions:
+                    # Si otro bot ya se está moviendo a esta posición, hay una posible colisión
+                    next_positions[next_pos].append(bot)
+                else:
+                    next_positions[next_pos] = [bot]
+
+        # Revisar si hay colisiones y actuar en consecuencia
+        for pos, bots_in_pos in next_positions.items():
+            if len(bots_in_pos) > 1:
+                # Si más de un bot se mueve a la misma posición, resolver el conflicto
+                print(f"Colisión detectada en posición {pos} entre los bots {', '.join(str(bot.unique_id) for bot in bots_in_pos)}")
+
+                # Ejemplo de resolución: Hacer que todos los bots excepto el primero en la lista esperen
+                for i, bot in enumerate(bots_in_pos[1:], start=1):
+                    print(f"Bot {bot.unique_id} esperando para evitar colisión")
+                    bot.action = None  # No tomar acción (esperar)
