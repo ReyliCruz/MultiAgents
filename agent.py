@@ -1,6 +1,6 @@
 from mesa.agent import Agent
 import numpy as np
-
+from queue import Queue
 
 class Bot(Agent):
 
@@ -23,7 +23,7 @@ class Bot(Agent):
         self.movements = 0
         self.target_goal_name = ""
         self.rewards = {}
-        self.visible_goal = True
+        self.isFree = True
 
         self.epsilon = 0.1
         self.alpha = 0.1
@@ -68,6 +68,7 @@ class Bot(Agent):
                 # Remove the goal agent from the grid
                 self.model.grid.remove_agent(self.model.grid.get_cell_list_contents(self.next_pos)[0])
                 self.done = True
+                self.target_goal_name = ""
 
             # Move the agent to the next position and update everything
             self.model.grid.move_agent(self, self.next_pos)
@@ -249,3 +250,30 @@ class TaskManager:
                 for i, bot in enumerate(bots_in_pos[1:], start=1):
                     print(f"Bot {bot.unique_id} esperando para evitar colisión")
                     bot.action = None  # No tomar acción (esperar)
+
+
+    def get_free_bots_queue(self):
+        """
+        Obtiene una cola de todos los bots con isFree=True.
+
+        Returns:
+        - free_bots_queue: Cola de bots que están libres (isFree=True).
+        """
+        free_bots_queue = Queue()
+        
+        # Agregar bots libres a la cola
+        for agent in self.environment.schedule.agents:
+            if isinstance(agent, Bot) and agent.isFree:
+                free_bots_queue.put(agent)
+
+        return free_bots_queue
+    
+    def assign_tasks_to_free_bots(self):
+        free_bots_queue = self.get_free_bots_queue()
+        
+        while not free_bots_queue.empty():
+            bot = free_bots_queue.get()  # Obtener el siguiente bot de la cola
+            # Ejemplo: Asignar una tarea o meta específica
+            self.assign_goal_to_bot(bot.unique_id, "MetaEjemplo")
+            bot.isFree = False  # Cambiar estado después de asignar la tarea
+

@@ -106,8 +106,10 @@ class Environment(Model):
         )
 
     def step(self):
-                # Monitorea posibles colisiones antes de que los agentes tomen su paso
+        # Monitorea posibles colisiones antes de que los agentes tomen su paso
         self.task_manager.monitor_bots()
+
+        #self.task_manager.assign_tasks_to_free_bots()
 
         # Train the agents in the environment
         if self.train and self._q_file is not None:
