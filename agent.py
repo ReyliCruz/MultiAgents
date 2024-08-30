@@ -22,6 +22,7 @@ class Bot(Agent):
         self.training_step = 0
         self.movements = 0
         self.target_goal_name = ""
+        self.rewards = {}
 
         self.epsilon = 0.1
         self.alpha = 0.1
@@ -110,11 +111,13 @@ class Bot(Agent):
                 next_state = self.model.states[next_pos]
 
                 #reward = self.model.rewards[next_state]
-                # Usar el diccionario de recompensas específico del bot
+                #reward = self.rewards.get(next_state, -1)
                 reward = self.rewards.get(next_state, -1)
 
                 #if next_state in self.model.goal_states:
-                if next_state in self.model.goal_states and (any(isinstance(goal, Goal) and goal.name == self.target_goal_name for goal in self.model.grid.get_cell_list_contents(next_pos))):
+                if next_state in self.model.goal_states and (any(
+                    isinstance(goal, Goal) and goal.name == self.target_goal_name
+                    for goal in self.model.grid.get_cell_list_contents(next_pos))):
                     done = True
 
                 self._update_q_values(state, action, reward, next_state)
@@ -214,6 +217,6 @@ class TaskManager:
             # Asignar la meta al bot
             bot.target_goal_name = goal_name
             bot.rewards = {state: 1 if state == goal.pos else -1 for state in self.environment.states.values()}
-            print(f"Meta '{goal_name}' asignada al bot {bot_id}.")
+            print(f"Meta '{bot.target_goal_name}' asignada al bot {bot.unique_id}.")
         else:
             print(f"No se pudo asignar la meta. Verifique que el bot y la meta existan.")

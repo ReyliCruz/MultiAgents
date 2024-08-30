@@ -45,14 +45,14 @@ model_params = {
     ),
     "train": mesa.visualization.Checkbox(
         name="train",
-        value=False,
+        value=True,
         description="Train the agents",
     ),
 }
 
 server = mesa.visualization.ModularServer(
     Environment, [grid, chart_charges],
-    "Retito", model_params, 6969
+    "AG-4", model_params, 6969
 )
 
 server.launch(open_browser=True)

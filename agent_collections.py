@@ -7,5 +7,5 @@ goals_collection = [
 bots_collection = [
     (101, 28, 8),
     (102, 27, 8),
-    (103, 26, 8)
+    #(103, 26, 8)
 ]

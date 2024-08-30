@@ -92,8 +92,8 @@ class Environment(Model):
 
         # Ejemplo de asignación de metas a bots
         self.task_manager.assign_goal_to_bot(101, "Salida")
-        self.task_manager.assign_goal_to_bot(102, "Rack")
-        self.task_manager.assign_goal_to_bot(103, "Banda")
+        self.task_manager.assign_goal_to_bot(102, "Banda")
+        #self.task_manager.assign_goal_to_bot(103, "Banda")
 
         self.assign_rewards()
 
@@ -159,6 +159,11 @@ class Environment(Model):
         if self.grid.is_cell_empty((x, y)):
             goal = Goal(goal_id, self, name=goal_name)
             self.grid.place_agent(goal, (x, y))
+
+            # Obtener el estado de la meta y añadirlo a goal_states
+            state = self.states.get((x, y), None)
+            if state is not None:
+                self.goal_states.append(state)
 
     def assign_rewards(self):
         """
