@@ -10,7 +10,7 @@ class Bot(Agent):
     # Define the movements (0: down, 1: right, 2: up, 3: left)
     MOVEMENTS = [(0, 1), (1, 0), (0, -1), (-1, 0)]
 
-    def __init__(self, unique_id, model, q_file=None):
+    def __init__(self, unique_id, model):
         super().__init__(unique_id, model)
         self.q_values = None
         self.done = False
@@ -34,10 +34,10 @@ class Bot(Agent):
 
         self.num_states = self.model.grid.width * self.model.grid.height
 
-        if q_file is None:
+        if self.q_file is None:
             self.reset_q_values()
         else:
-            self.load_q_values(q_file)
+            self.load_q_values(self.q_file)
 
     def reset_q_values(self):
         self.q_values = {(state, action): np.random.uniform(0, .01)

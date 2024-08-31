@@ -248,6 +248,10 @@ class Environment(Model):
                             self.task_manager.assign_goal_to_bot(agent.unique_id, origin_name)
 
                         self.assign_rewards()
+
+                        agent.q_file = f"q_values{agent.target_goal_name}.npy"
+
+                        agent.load_q_values(agent.q_file)
                             
                         agent.train()
                 else:
