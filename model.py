@@ -5,9 +5,11 @@ from mesa.space import SingleGrid
 from mesa.time import SimultaneousActivation
 from mesa.datacollection import DataCollector
 
-from agent_collections import goals_collection, bots_collection
+from agent_collections import goals_collection, bots_collection, articles_collection
 
 import numpy as np
+import random
+from queue import Queue
 
 
 class Environment(Model):
@@ -19,7 +21,7 @@ class Environment(Model):
         'BBBBBBBBBBBFFFFFFFFFFBBBBFFFFB',
         'BBBBBBBBBBBFFFFFFFFFFBBBBFFFFB',
         'BBBBBBBBBBBFFFFFFFFFFBBBBFFFFB',
-        'BBBBBBBBBBBFFFFFFGFFFBBBBFFFFB',
+        'BBBBBBBBBBBFFFFFFFFFFBBBBFFFFB',
         'BBBBBBBBBBBFFFFFFBBFFBBBBFFFFB',
         'BBBBBBBBBBBBBBFFFBBFFFFFFFFFFB',
         'BBBBBBBBBBBBBBFFFFFFFFFFFFFFFB',
@@ -32,8 +34,8 @@ class Environment(Model):
         'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
         'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
         'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
-        'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
-        'BFFFFFFFFFFFFFFFFFFFFFFFFFFF1B',
+        'BFFFFFFFFFFFFFFFFFFFFFFFFBBFBB',
+        'BFFFFFFFFFFFFFFFFFFFFFFFFBFFFB',
         'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
         'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
         'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
@@ -49,6 +51,10 @@ class Environment(Model):
         self._q_file = q_file
 
         self.goal_states = []
+        self.time_counter = 0
+        self.next_generation_time = random.randint(4, 8)  # Tiempo inicial aleatorio para extraer artículo
+        self.articles_queue = Queue()  # Cola para almacenar artículos
+
 
         # Default environment description for the model
         self.train = train
@@ -106,6 +112,12 @@ class Environment(Model):
         )
 
     def step(self):
+        self.time_counter += 1
+
+
+
+
+
         # Monitorea posibles colisiones antes de que los agentes tomen su paso
         self.task_manager.monitor_bots()
 
