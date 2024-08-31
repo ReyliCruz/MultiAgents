@@ -22,8 +22,11 @@ class Bot(Agent):
         self.training_step = 0
         self.movements = 0
         self.target_goal_name = ""
+        self.previous_target = ""
         self.rewards = {}
         self.isFree = True
+        self.task = None
+        self.q_file = None
 
         self.epsilon = 0.1
         self.alpha = 0.1
@@ -53,9 +56,12 @@ class Bot(Agent):
         self.next_state = self.model.states[self.next_pos]
 
     def advance(self) -> None:
+        if not self.task:
+            return
+        
+        article_id, weight, origin, destination = self.task
 
         if self.target_goal_name == "":
-            print("Sin meta asignada")
             return
         
         # Check if the agent can move to the next position
@@ -66,9 +72,24 @@ class Bot(Agent):
         ):
             if self.next_state in self.model.goal_states:
                 # Remove the goal agent from the grid
-                self.model.grid.remove_agent(self.model.grid.get_cell_list_contents(self.next_pos)[0])
-                self.done = True
-                self.target_goal_name = ""
+                #self.model.grid.remove_agent(self.model.grid.get_cell_list_contents(self.next_pos)[0])
+                #self.done = True
+                #self.target_goal_name = ""
+
+                # Verificar si el bot ha llegado al `origin`
+                if self.target_goal_name == origin and self.previous_target == "":
+                    self.model.grid.remove_agent(self.model.grid.get_cell_list_contents(self.next_pos)[0])
+                    self.target_goal_name = ""
+                    self.previous_target = origin
+
+                # Verificar si el bot ha llegado al `destination`
+                elif self.target_goal_name == destination and self.previous_target == origin:
+                    self.model.grid.remove_agent(self.model.grid.get_cell_list_contents(self.next_pos)[0])
+                    self.done = True
+                    self.target_goal_name = ""
+                    self.previous_target = ""
+                    self.task = None
+                    self.isFree = True
 
             # Move the agent to the next position and update everything
             self.model.grid.move_agent(self, self.next_pos)
@@ -129,7 +150,6 @@ class Bot(Agent):
                 if reward>=0:
                     pos = next_pos
                     state = next_state
-            
             
             self.epsilon = max(self.epsilon * 0.99, 0.01)
 
@@ -251,7 +271,6 @@ class TaskManager:
                     print(f"Bot {bot.unique_id} esperando para evitar colisión")
                     bot.action = None  # No tomar acción (esperar)
 
-
     def get_free_bots_queue(self):
         """
         Obtiene una cola de todos los bots con isFree=True.
@@ -269,11 +288,17 @@ class TaskManager:
         return free_bots_queue
     
     def assign_tasks_to_free_bots(self):
+        """
+        Asigna tareas de la cola de artículos a los bots libres. Almacena la tarea completa en la variable 'task' del bot.
+        """
         free_bots_queue = self.get_free_bots_queue()
         
-        while not free_bots_queue.empty():
-            bot = free_bots_queue.get()  # Obtener el siguiente bot de la cola
-            # Ejemplo: Asignar una tarea o meta específica
-            self.assign_goal_to_bot(bot.unique_id, "MetaEjemplo")
-            bot.isFree = False  # Cambiar estado después de asignar la tarea
+        # Asignar artículos a bots libres desde la cola
+        while not self.environment.articles_queue.empty() and not free_bots_queue.empty():
+            article = self.environment.articles_queue.get()  # Obtener el primer artículo de la cola de artículos
+            bot = free_bots_queue.get()  # Obtener el siguiente bot libre de la cola de bots libres
 
+            bot.task = article
+            bot.isFree = False
+            bot.done = False
+            print(f"Tarea {article} asignada al bot {bot.unique_id}")

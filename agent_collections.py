@@ -15,6 +15,3 @@ articles_collection = [
     (202, 10, "Banda", "Salida"),
     (203, 5, "Rack", "Salida")
 ]
-
-flows_collection = [
-]

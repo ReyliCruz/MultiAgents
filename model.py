@@ -34,8 +34,8 @@ class Environment(Model):
         'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
         'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
         'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
-        'BFFFFFFFFFFFFFFFFFFFFFFFFBBFBB',
-        'BFFFFFFFFFFFFFFFFFFFFFFFFBFFFB',
+        'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
+        'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
         'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
         'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
         'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
@@ -51,10 +51,9 @@ class Environment(Model):
         self._q_file = q_file
 
         self.goal_states = []
-        self.time_counter = 0
-        self.next_generation_time = random.randint(4, 8)  # Tiempo inicial aleatorio para extraer artículo
         self.articles_queue = Queue()  # Cola para almacenar artículos
-
+        self.time_counter = 0  # Contador de tiempo para extraer artículos
+        self.next_generation_time = random.randint(3, 5)  # Tiempo inicial aleatorio para extraer artículo
 
         # Default environment description for the model
         self.train = train
@@ -97,11 +96,11 @@ class Environment(Model):
         self.task_manager = TaskManager(self)
 
         # Ejemplo de asignación de metas a bots
-        self.task_manager.assign_goal_to_bot(101, "Salida")
-        self.task_manager.assign_goal_to_bot(102, "Rack")
-        self.task_manager.assign_goal_to_bot(103, "Banda")
+        #self.task_manager.assign_goal_to_bot(101, "Salida")
+        #self.task_manager.assign_goal_to_bot(102, "Rack")
+        #self.task_manager.assign_goal_to_bot(103, "Banda")
 
-        self.assign_rewards()
+        #self.assign_rewards()
 
         reporters = {
             f"Bot{i+1}": lambda m, i=i: m.schedule.agents[i].total_return for i in range(len(self.schedule.agents))
@@ -112,28 +111,39 @@ class Environment(Model):
         )
 
     def step(self):
-        self.time_counter += 1
 
-
-
-
-
-        # Monitorea posibles colisiones antes de que los agentes tomen su paso
         self.task_manager.monitor_bots()
 
-        #self.task_manager.assign_tasks_to_free_bots()
+        for goal_id, x, y, name in goals_collection:
+            self.add_goal(goal_id, x, y, name)
+
+        self.time_counter += 1
+
+        if self.time_counter >= self.next_generation_time:
+            self.time_counter = 0
+            self.next_generation_time = random.randint(15, 20)
+            self.generate_and_queue_article()
+                # Imprimir el contenido actual de la cola
+            print("Contenido actual de la cola de artículos:")
+            for article in list(self.articles_queue.queue):
+                print(article)
+
+        self.task_manager.assign_tasks_to_free_bots()
+
+        self.assign_goals_to_bots()
+
+        #self.assign_rewards()
 
         # Train the agents in the environment
-        if self.train and self._q_file is not None:
-            for agent in self.schedule.agents:
-                agent.train()
-                self.train = False
+        #if self.train and self._q_file is not None:
+        #    for agent in self.schedule.agents:
+        #        agent.train()
+        #        self.train = False
 
         self.datacollector.collect(self)
 
         self.schedule.step()
 
-        #self.running = not any([a.done for a in self.schedule.agents])
         self.running = True
 
     def add_box_from_map(self, desc: list):
@@ -183,6 +193,8 @@ class Environment(Model):
             if state is not None:
                 self.goal_states.append(state)
 
+            #self.states[goal_name] = (x, y)
+
     def assign_rewards(self):
         """
         Asigna recompensas específicas para cada bot basado en su meta asignada.
@@ -203,3 +215,41 @@ class Environment(Model):
                         agent.rewards[state] = -1
                     else:
                         agent.rewards[state] = 0
+
+    def generate_and_queue_article(self):
+        """Genera un artículo aleatorio de la colección y lo agrega a la cola."""
+        if articles_collection:
+            # Seleccionar un artículo aleatorio de la colección
+            article = random.choice(articles_collection)
+            self.articles_queue.put(article)  # Agregar el artículo a la cola
+
+    def assign_goals_to_bots(self):
+        """
+        Asigna metas a los bots en función de su tarea actual.
+        Si el bot no tiene una meta asignada, se le asigna el origen.
+        Si el bot ya ha llegado al origen, se le asigna el destino.
+        """
+        for agent in self.schedule.agents:
+            if isinstance(agent, Bot) and agent.task:
+                article_id, weight, origin_name, destination_name = agent.task
+
+                # Obtener las coordenadas del origen y destino a partir de los nombres
+                origin_coords = next(((x, y) for (goal_id, x, y, name) in goals_collection if name == origin_name), None)
+                destination_coords = next(((x, y) for (goal_id, x, y, name) in goals_collection if name == destination_name), None)
+
+                if origin_coords and destination_coords:
+                    # Asignar el origen como meta inicial si aún no tiene ninguna meta asignada
+                    if agent.target_goal_name == "" and agent.done == False:
+                        if agent.pos == origin_coords:
+                            # Si el bot ya está en el origen, asignar destino
+                            self.task_manager.assign_goal_to_bot(agent.unique_id, destination_name)
+                        else:
+                            # Si no, asignar origen
+                            self.task_manager.assign_goal_to_bot(agent.unique_id, origin_name)
+
+                        self.assign_rewards()
+                            
+                        agent.train()
+                else:
+                    print(f"Error: No se encontraron coordenadas para {origin_name} o {destination_name}")
+
