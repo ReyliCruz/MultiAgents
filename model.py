@@ -10,6 +10,7 @@ from agent_collections import goals_collection, bots_collection, articles_collec
 import numpy as np
 import random
 from queue import Queue
+import os
 
 
 class Environment(Model):
@@ -53,7 +54,7 @@ class Environment(Model):
         self.goal_states = []
         self.articles_queue = Queue()  # Cola para almacenar artículos
         self.time_counter = 0  # Contador de tiempo para extraer artículos
-        self.next_generation_time = random.randint(3, 5)  # Tiempo inicial aleatorio para extraer artículo
+        self.next_generation_time = 1  # Tiempo inicial aleatorio para extraer artículo
 
         # Default environment description for the model
         self.train = train
@@ -115,9 +116,6 @@ class Environment(Model):
 
         self.task_manager.monitor_bots_collision()
 
-        #for goal_id, x, y, name in goals_collection:
-        #    self.add_goal(goal_id, x, y, name)
-
         self.time_counter += 1
 
         if self.time_counter >= self.next_generation_time:
@@ -128,14 +126,6 @@ class Environment(Model):
         self.task_manager.assign_tasks_to_free_bots()
 
         self.assign_goals_to_bots()
-
-        #self.assign_rewards()
-
-        # Train the agents in the environment
-        #if self.train and self._q_file is not None:
-        #    for agent in self.schedule.agents:
-        #        agent.train()
-        #        self.train = False
 
         self.datacollector.collect(self)
 
@@ -246,12 +236,17 @@ class Environment(Model):
 
                         self.assign_rewards()
 
-                        agent.q_file = f"q_values{agent.target_goal_name}.npy"
+                        #agent.q_file = f"q_values{agent.target_goal_name}.npy"
 
-                        agent.training_step = agent.MAX_NUM_TRAINING_STEPS
+                        # Verificar si el archivo de Q-values existe
+                        if os.path.exists(f"./q_values{agent.target_goal_name}.npy"):
+                            agent.q_file = f"q_values{agent.target_goal_name}.npy"
+                            agent.training_step = agent.MAX_NUM_TRAINING_STEPS  # Evitar entrenamiento adicional
+                            agent.load_q_values(agent.q_file)
+                        else:
+                            print(f"Archivo ./q_values{agent.target_goal_name}.npy no encontrado. Entrenando agente.")
+                            agent.train()  # Entrenar al agente si no existe el archivo de Q-values
 
-                        agent.load_q_values(agent.q_file)
-                            
                         #agent.train()
                 else:
                     print(f"Error: No se encontraron coordenadas para {origin_name} o {destination_name}")

@@ -27,6 +27,7 @@ class Bot(Agent):
         self.isFree = True
         self.task = None
         self.q_file = None
+        self.history = []
 
         self.epsilon = 0.1
         self.alpha = 0.1
@@ -49,7 +50,24 @@ class Bot(Agent):
             self.state = self.model.states[self.pos]
 
         # Agent chooses an action from the policy
-        self.action = self.eps_greedy_policy(self.state)
+        #self.action = self.eps_greedy_policy(self.state)
+
+        
+        # Guardar historial de posiciones
+        self.history.append(self.pos)
+        if len(self.history) > 10:  # Limitar el tamaño del historial
+            self.history.pop(0)
+        
+        # Detectar oscilación
+        if self.detect_oscillation():
+            # Si se detecta oscilación, forzar acción aleatoria
+            print(f"Bot {self.unique_id} detectó oscilación. Seleccionando acción aleatoria.")
+            self.backtrack(1)
+            self.action = self.random_policy()
+        else:
+            # Elegir acción normalmente con política epsilon-greedy
+            self.action = self.eps_greedy_policy(self.state)
+        
 
         # Get the next position
         self.next_pos = self.perform(self.pos, self.action)
@@ -71,10 +89,6 @@ class Bot(Agent):
                 for goal in self.model.grid.get_cell_list_contents(self.next_pos))
         ):
             if self.next_state in self.model.goal_states:
-                # Remove the goal agent from the grid
-                #self.model.grid.remove_agent(self.model.grid.get_cell_list_contents(self.next_pos)[0])
-                #self.done = True
-                #self.target_goal_name = ""
 
                 # Verificar si el bot ha llegado al `origin`
                 if self.target_goal_name == origin and self.previous_target == "":
@@ -189,6 +203,25 @@ class Bot(Agent):
         max_q_value = np.max(q_values)
         self.q_values[state, action] += self.alpha * (
                 reward + self.gamma * max_q_value - self.q_values[state, action])
+        
+    def detect_oscillation(self):
+        """
+        Detecta si el bot está en un bucle de oscilación.
+        Retorna True si se detecta oscilación, False en caso contrario.
+        """
+        if len(self.history) >= 4:
+            if self.history[-1] == self.history[-3] and self.history[-2] == self.history[-4]:
+                return True
+        return False
+    
+    def backtrack(self, steps):
+        """
+        Retrocede una cantidad de pasos especificada.
+        """
+        if len(self.history) > steps:
+            backtrack_pos = self.history[-(steps + 1)]
+            self.model.grid.move_agent(self, backtrack_pos)
+            self.history = self.history[:-steps]  # Limpiar historial reciente después de retroceder
 
 
 class Box(Agent):
