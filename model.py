@@ -105,7 +105,7 @@ class Environment(Model):
 
     def step(self):
 
-        self.task_manager.monitor_bots_collision()
+        #self.task_manager.monitor_bots_collision()
 
         self.time_counter += 1
 
@@ -117,6 +117,8 @@ class Environment(Model):
         self.task_manager.assign_tasks_to_free_bots()
 
         self.assign_goals_to_bots()
+
+        self.task_manager.manage_bot_movements()
 
         self.datacollector.collect(self)
 

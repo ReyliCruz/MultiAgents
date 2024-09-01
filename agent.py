@@ -1,6 +1,7 @@
 from mesa.agent import Agent
 import numpy as np
 from queue import Queue
+import random
 
 class Bot(Agent):
 
@@ -29,7 +30,7 @@ class Bot(Agent):
         self.q_file = None
         self.history = []
 
-        self.epsilon = 0.1
+        self.epsilon = 1.0
         self.alpha = 0.1
         self.gamma = 0.9
 
@@ -50,7 +51,9 @@ class Bot(Agent):
             self.state = self.model.states[self.pos]
 
         # Agent chooses an action from the policy
-        self.action = self.eps_greedy_policy(self.state)
+        #self.action = self.eps_greedy_policy(self.state)
+
+        self.action = self.greedy_policy(self.state)
 
         '''
         # Guardar historial de posiciones
@@ -207,6 +210,10 @@ class Bot(Agent):
         else:
             q_values = [self.q_values[state, action] for action in range(self.NUM_OF_ACTIONS)]
             return np.argmax(q_values)
+        
+    def greedy_policy(self, state):
+        q_values = [self.q_values[state, action] for action in range(self.NUM_OF_ACTIONS)]
+        return np.argmax(q_values)
 
     def _update_q_values(self, state, action, reward, next_state):
         q_values = [self.q_values[next_state, action] for action in range(self.NUM_OF_ACTIONS)]
@@ -321,7 +328,8 @@ class TaskManager:
 
                 # Negotiate movement: Allow the bot with the highest priority (e.g., unique_id) to move
                 highest_priority_bot = min(bots_in_pos, key=lambda b: b.unique_id)
-                highest_priority_bot.action = highest_priority_bot.eps_greedy_policy(highest_priority_bot.state)
+                highest_priority_bot.action = highest_priority_bot.greedy_policy(highest_priority_bot.state)
+                #highest_priority_bot.action = highest_priority_bot.eps_greedy_policy(highest_priority_bot.state)
                 print(f"Bot {highest_priority_bot.unique_id} moving to avoid collision.")
 
     def monitor_bots(self):
@@ -383,3 +391,59 @@ class TaskManager:
             bot.isFree = False
             bot.done = False
             print(f"Tarea {article} asignada al bot {bot.unique_id}")
+
+
+
+    def manage_bot_movements(self):
+        """ Gestiona y coordina los movimientos de los bots para evitar colisiones. """
+        # Diccionario para almacenar la posición futura planificada de cada bot
+        planned_positions = {}
+
+        # Iterar sobre todos los bots en el entorno
+        for bot in self.environment.schedule.agents:
+            if isinstance(bot, Bot):
+
+                if bot.state is None:
+                    bot.state = self.environment.states[bot.pos]
+                    
+                # Calcular la próxima posición basada en su acción planificada
+                next_pos = bot.perform(bot.pos, bot.greedy_policy(bot.state))
+                
+                # Si la posición ya está en uso, se detecta una colisión potencial
+                if next_pos in planned_positions:
+                    planned_positions[next_pos].append(bot)
+                else:
+                    planned_positions[next_pos] = [bot]
+
+        # Ajustar movimientos para evitar colisiones
+        for pos, bots_in_pos in planned_positions.items():
+            if len(bots_in_pos) > 1:
+                # Hay más de un bot planeando moverse a la misma posición
+                print(f"Colisión prevista en posición {pos} entre los bots {[bot.unique_id for bot in bots_in_pos]}")
+                
+                for bot in bots_in_pos:
+                    # Replanificar la acción para cada bot involucrado
+                    bot.action = self.find_alternative_action(bot)
+                    bot.next_pos = bot.perform(bot.pos, bot.action)
+                    print(f"Bot {bot.unique_id} replanificado para moverse a {bot.next_pos}")
+
+    def find_alternative_action(self, bot):
+        """ Encuentra una acción alternativa para el bot para evitar colisiones. """
+        possible_actions = list(range(bot.NUM_OF_ACTIONS))
+        random.shuffle(possible_actions)  # Aleatorizar las acciones
+
+        for action in possible_actions:
+            alternative_pos = bot.perform(bot.pos, action)
+            # Verificar si la nueva posición alternativa está libre y no es una zona de colisión
+            if self.environment.grid.is_cell_empty(alternative_pos) and not self.is_collision_zone(alternative_pos):
+                return action
+
+        # Si no hay alternativas seguras, el bot espera (puede ajustarse según la lógica deseada)
+        return None
+
+    def is_collision_zone(self, pos):
+        """ Verifica si la casilla es una zona de colisión potencial. """
+        for agent in self.environment.schedule.agents:
+            if isinstance(agent, Bot) and agent.pos == pos:
+                return True
+        return False
