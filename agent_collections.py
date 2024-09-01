@@ -14,14 +14,14 @@ bots_collection = [
     (102, 27, 8),
     (103, 28, 8),
     (104, 25, 8),
-    (105, 24, 8),
-    (106, 23, 8)
+    #(105, 24, 8),
+    #(106, 23, 8)
 ]
 
 articles_collection = [
     (201, 20, "Banda", "Rack1"),
     (202, 10, "Banda", "Salida"),
-    (203, 5, "Rack1", "Cargador1"),
+    (203, 5, "Rack1", "Salida"),
     (204, 10, "Rack2", "Salida"),
     (205, 5, "Rack3", "Salida"),
     (206, 10, "Rack4", "Cargador1"),

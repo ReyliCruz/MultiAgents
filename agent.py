@@ -50,9 +50,9 @@ class Bot(Agent):
             self.state = self.model.states[self.pos]
 
         # Agent chooses an action from the policy
-        #self.action = self.eps_greedy_policy(self.state)
+        self.action = self.eps_greedy_policy(self.state)
 
-        
+        '''
         # Guardar historial de posiciones
         self.history.append(self.pos)
         if len(self.history) > 10:  # Limitar el tamaño del historial
@@ -67,6 +67,7 @@ class Bot(Agent):
         else:
             # Elegir acción normalmente con política epsilon-greedy
             self.action = self.eps_greedy_policy(self.state)
+        '''
         
 
         # Get the next position
@@ -95,6 +96,7 @@ class Bot(Agent):
                     #self.model.grid.remove_agent(self.model.grid.get_cell_list_contents(self.next_pos)[0])
                     self.target_goal_name = ""
                     self.previous_target = origin
+                    print("Llego al origen")
 
                 # Verificar si el bot ha llegado al `destination`
                 elif self.target_goal_name == destination and self.previous_target == origin:
@@ -104,6 +106,7 @@ class Bot(Agent):
                     self.previous_target = ""
                     self.task = None
                     self.isFree = True
+                    print("Llego al destino")
 
             # Move the agent to the next position and update everything
             self.model.grid.move_agent(self, self.next_pos)
@@ -129,16 +132,24 @@ class Bot(Agent):
         np.save(f"./q_values{self.target_goal_name}.npy", self.q_values)
 
     def train(self):
-        inital_pos = self.pos
-        initial_state = self.model.states[inital_pos]
+        #inital_pos = self.pos
+        #initial_state = self.model.states[inital_pos]
 
         for episode in range(1000):
             training_step = 0
             done = False
             total_return = 0
             movements = 0
-            pos = inital_pos
-            state = initial_state
+            #pos = inital_pos
+            #state = initial_state
+
+            # Encontrar una posición inicial aleatoria vacía
+            pos = self.find_random_empty_position()
+            state = self.model.states[pos]
+
+            # Colocar al agente en la nueva posición inicial
+            self.model.grid.move_agent(self, pos)
+            self.state = state
 
             while not done:
                 training_step += 1
@@ -171,12 +182,11 @@ class Bot(Agent):
 
         self.save_q_values()
 
-
     def load_q_values(self, q_file):
         try:
-            #print(f"Loading Q-values from {q_file}")
+            print(f"Loading Q-values from {q_file}")
             self.q_values = np.load(q_file, allow_pickle=True).item()
-            #print(f"Q-values from {q_file} have been loaded.")
+            print(f"Q-values from {q_file} have been loaded.")
         except FileNotFoundError:
             self.reset_q_values()
             print("File not found. Q-values have been reset.")
@@ -222,6 +232,18 @@ class Bot(Agent):
             backtrack_pos = self.history[-(steps + 1)]
             self.model.grid.move_agent(self, backtrack_pos)
             self.history = self.history[:-steps]  # Limpiar historial reciente después de retroceder
+
+    def find_random_empty_position(self):
+        """ Encuentra una posición aleatoria vacía en la cuadrícula. """
+        empty_positions = [
+            (x, y) for x in range(self.model.grid.width)
+            for y in range(self.model.grid.height)
+            if self.model.grid.is_cell_empty((x, y))
+        ]
+        if empty_positions:
+            return self.random.choice(empty_positions)
+        else:
+            raise ValueError("No hay posiciones vacías disponibles en la cuadrícula.")
 
 
 class Box(Agent):

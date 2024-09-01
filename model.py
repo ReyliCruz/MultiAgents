@@ -87,22 +87,13 @@ class Environment(Model):
             else:
                 self.rewards[state] = 0
 
-        # Usar bucles for para agregar metas y bots
         for goal_id, x, y, name in goals_collection:
             self.add_goal(goal_id, x, y, name)
 
         for bot_id, x, y in bots_collection:
             self.add_robot(bot_id, x, y)
 
-        # Crear una instancia de TaskManager
         self.task_manager = TaskManager(self)
-
-        # Ejemplo de asignación de metas a bots
-        #self.task_manager.assign_goal_to_bot(101, "Salida")
-        #self.task_manager.assign_goal_to_bot(102, "Rack")
-        #self.task_manager.assign_goal_to_bot(103, "Banda")
-
-        #self.assign_rewards()
 
         reporters = {
             f"Bot{i+1}": lambda m, i=i: m.schedule.agents[i].total_return for i in range(len(self.schedule.agents))
@@ -236,8 +227,6 @@ class Environment(Model):
 
                         self.assign_rewards()
 
-                        #agent.q_file = f"q_values{agent.target_goal_name}.npy"
-
                         # Verificar si el archivo de Q-values existe
                         if os.path.exists(f"./q_values{agent.target_goal_name}.npy"):
                             agent.q_file = f"q_values{agent.target_goal_name}.npy"
@@ -248,6 +237,6 @@ class Environment(Model):
                             agent.train()  # Entrenar al agente si no existe el archivo de Q-values
 
                         #agent.train()
+
                 else:
                     print(f"Error: No se encontraron coordenadas para {origin_name} o {destination_name}")
-
