@@ -78,13 +78,13 @@ class Bot(Agent):
 
                 # Verificar si el bot ha llegado al `origin`
                 if self.target_goal_name == origin and self.previous_target == "":
-                    self.model.grid.remove_agent(self.model.grid.get_cell_list_contents(self.next_pos)[0])
+                    #self.model.grid.remove_agent(self.model.grid.get_cell_list_contents(self.next_pos)[0])
                     self.target_goal_name = ""
                     self.previous_target = origin
 
                 # Verificar si el bot ha llegado al `destination`
                 elif self.target_goal_name == destination and self.previous_target == origin:
-                    self.model.grid.remove_agent(self.model.grid.get_cell_list_contents(self.next_pos)[0])
+                    #self.model.grid.remove_agent(self.model.grid.get_cell_list_contents(self.next_pos)[0])
                     self.done = True
                     self.target_goal_name = ""
                     self.previous_target = ""
@@ -160,9 +160,9 @@ class Bot(Agent):
 
     def load_q_values(self, q_file):
         try:
-            print(f"Loading Q-values from {q_file}")
+            #print(f"Loading Q-values from {q_file}")
             self.q_values = np.load(q_file, allow_pickle=True).item()
-            print(f"Q-values from {q_file} have been loaded.")
+            #print(f"Q-values from {q_file} have been loaded.")
         except FileNotFoundError:
             self.reset_q_values()
             print("File not found. Q-values have been reset.")
@@ -242,6 +242,32 @@ class TaskManager:
             print(f"Meta '{bot.target_goal_name}' asignada al bot {bot.unique_id}.")
         else:
             print(f"No se pudo asignar la meta. Verifique que el bot y la meta existan.")
+
+    def monitor_bots_collision(self):
+        """
+        Monitorea a los bots para detectar colisiones en sus próximos pasos y previene que ocurra la colisión.
+        """
+        bots = [agent for agent in self.environment.schedule.agents if isinstance(agent, Bot)]
+        next_positions = {}
+
+        for bot in bots:
+            if bot.action is not None:
+                next_pos = bot.perform(bot.pos, bot.action)
+                if next_pos in next_positions:
+                    next_positions[next_pos].append(bot)
+                else:
+                    next_positions[next_pos] = [bot]
+
+        for pos, bots_in_pos in next_positions.items():
+            if len(bots_in_pos) > 1:
+                print(f"Colisión detectada en posición {pos} entre los bots {', '.join(str(bot.unique_id) for bot in bots_in_pos)}")
+                for bot in bots_in_pos:
+                    bot.action = None  # Make bots wait
+
+                # Negotiate movement: Allow the bot with the highest priority (e.g., unique_id) to move
+                highest_priority_bot = min(bots_in_pos, key=lambda b: b.unique_id)
+                highest_priority_bot.action = highest_priority_bot.eps_greedy_policy(highest_priority_bot.state)
+                print(f"Bot {highest_priority_bot.unique_id} moving to avoid collision.")
 
     def monitor_bots(self):
         """

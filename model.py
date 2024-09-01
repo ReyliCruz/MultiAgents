@@ -1,7 +1,7 @@
 from mesa.model import Model
 from agent import Box, Goal, Bot, TaskManager
 
-from mesa.space import SingleGrid
+from mesa.space import SingleGrid, MultiGrid
 from mesa.time import SimultaneousActivation
 from mesa.datacollection import DataCollector
 
@@ -62,7 +62,8 @@ class Environment(Model):
 
         M, N = len(desc), len(desc[0])
 
-        self.grid = SingleGrid(M, N, False)
+        #self.grid = SingleGrid(M, N, False)
+        self.grid = MultiGrid(M, N, False)
         self.schedule = SimultaneousActivation(self)
 
         # Place agents in the environment
@@ -112,10 +113,10 @@ class Environment(Model):
 
     def step(self):
 
-        self.task_manager.monitor_bots()
+        self.task_manager.monitor_bots_collision()
 
-        for goal_id, x, y, name in goals_collection:
-            self.add_goal(goal_id, x, y, name)
+        #for goal_id, x, y, name in goals_collection:
+        #    self.add_goal(goal_id, x, y, name)
 
         self.time_counter += 1
 
@@ -123,10 +124,6 @@ class Environment(Model):
             self.time_counter = 0
             self.next_generation_time = random.randint(15, 20)
             self.generate_and_queue_article()
-                # Imprimir el contenido actual de la cola
-            print("Contenido actual de la cola de artículos:")
-            for article in list(self.articles_queue.queue):
-                print(article)
 
         self.task_manager.assign_tasks_to_free_bots()
 
@@ -251,9 +248,11 @@ class Environment(Model):
 
                         agent.q_file = f"q_values{agent.target_goal_name}.npy"
 
+                        agent.training_step = agent.MAX_NUM_TRAINING_STEPS
+
                         agent.load_q_values(agent.q_file)
                             
-                        agent.train()
+                        #agent.train()
                 else:
                     print(f"Error: No se encontraron coordenadas para {origin_name} o {destination_name}")
 
