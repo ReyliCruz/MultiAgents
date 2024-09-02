@@ -24,11 +24,14 @@ class Bot(Agent):
         self.movements = 0
         self.target_goal_name = ""
         self.previous_target = ""
+        self.aux_target = ""
         self.rewards = {}
         self.isFree = True
         self.task = None
         self.q_file = None
         self.history = []
+        self.battery = 100
+        self.weight_box = 0
 
         self.epsilon = 1.0
         self.alpha = 0.1
@@ -47,15 +50,18 @@ class Bot(Agent):
                          for action in range(self.NUM_OF_ACTIONS)}
 
     def step(self) -> None:
+        if self.battery <= 0:
+            print(f"Bot {self.unique_id} sin batería, no puede moverse.")
+            return
+
         if self.state is None:
             self.state = self.model.states[self.pos]
 
         # Agent chooses an action from the policy
         #self.action = self.eps_greedy_policy(self.state)
 
-        self.action = self.greedy_policy(self.state)
+        #self.action = self.greedy_policy(self.state)
 
-        '''
         # Guardar historial de posiciones
         self.history.append(self.pos)
         if len(self.history) > 10:  # Limitar el tamaño del historial
@@ -65,17 +71,18 @@ class Bot(Agent):
         if self.detect_oscillation():
             # Si se detecta oscilación, forzar acción aleatoria
             print(f"Bot {self.unique_id} detectó oscilación. Seleccionando acción aleatoria.")
-            self.backtrack(1)
+            self.backtrack(3)
             self.action = self.random_policy()
         else:
             # Elegir acción normalmente con política epsilon-greedy
-            self.action = self.eps_greedy_policy(self.state)
-        '''
+            self.action = self.greedy_policy(self.state)
         
-
         # Get the next position
         self.next_pos = self.perform(self.pos, self.action)
         self.next_state = self.model.states[self.next_pos]
+
+        if (self.target_goal_name != ""):
+            self.battery = self.battery -  (1 + self.weight_box * 0.1)/2
 
     def advance(self) -> None:
         if not self.task:
@@ -97,19 +104,19 @@ class Bot(Agent):
                 # Verificar si el bot ha llegado al `origin`
                 if self.target_goal_name == origin and self.previous_target == "":
                     #self.model.grid.remove_agent(self.model.grid.get_cell_list_contents(self.next_pos)[0])
+                    self.weight_box = weight
                     self.target_goal_name = ""
                     self.previous_target = origin
-                    print("Llego al origen")
 
                 # Verificar si el bot ha llegado al `destination`
                 elif self.target_goal_name == destination and self.previous_target == origin:
                     #self.model.grid.remove_agent(self.model.grid.get_cell_list_contents(self.next_pos)[0])
+                    self.weight_box = 0
                     self.done = True
                     self.target_goal_name = ""
                     self.previous_target = ""
                     self.task = None
                     self.isFree = True
-                    print("Llego al destino")
 
             # Move the agent to the next position and update everything
             self.model.grid.move_agent(self, self.next_pos)
@@ -187,9 +194,9 @@ class Bot(Agent):
 
     def load_q_values(self, q_file):
         try:
-            print(f"Loading Q-values from {q_file}")
+            #print(f"Loading Q-values from {q_file}")
             self.q_values = np.load(q_file, allow_pickle=True).item()
-            print(f"Q-values from {q_file} have been loaded.")
+            #print(f"Q-values from {q_file} have been loaded.")
         except FileNotFoundError:
             self.reset_q_values()
             print("File not found. Q-values have been reset.")
@@ -228,7 +235,14 @@ class Bot(Agent):
         """
         if len(self.history) >= 4:
             if self.history[-1] == self.history[-3] and self.history[-2] == self.history[-4]:
+                print("Oscilacion lineal")
                 return True
+            
+        elif len(self.history) >= 8:
+            if self.history[-1] == self.history[-5] and self.history[-2] == self.history[-6] and self.history[-3] == self.history[-7] and self.history[-4] == self.history[-8]:
+                print("Oscilacion circular")
+                return True
+            
         return False
     
     def backtrack(self, steps):
@@ -301,7 +315,7 @@ class TaskManager:
             # Asignar la meta al bot
             bot.target_goal_name = goal_name
             bot.rewards = {state: 1 if state == goal.pos else -1 for state in self.environment.states.values()}
-            print(f"Meta '{bot.target_goal_name}' asignada al bot {bot.unique_id}.")
+            #print(f"Meta '{bot.target_goal_name}' asignada al bot {bot.unique_id}.")
         else:
             print(f"No se pudo asignar la meta. Verifique que el bot y la meta existan.")
 
@@ -419,13 +433,13 @@ class TaskManager:
         for pos, bots_in_pos in planned_positions.items():
             if len(bots_in_pos) > 1:
                 # Hay más de un bot planeando moverse a la misma posición
-                print(f"Colisión prevista en posición {pos} entre los bots {[bot.unique_id for bot in bots_in_pos]}")
+                #print(f"Colisión prevista en posición {pos} entre los bots {[bot.unique_id for bot in bots_in_pos]}")
                 
                 for bot in bots_in_pos:
                     # Replanificar la acción para cada bot involucrado
                     bot.action = self.find_alternative_action(bot)
                     bot.next_pos = bot.perform(bot.pos, bot.action)
-                    print(f"Bot {bot.unique_id} replanificado para moverse a {bot.next_pos}")
+                    #print(f"Bot {bot.unique_id} replanificado para moverse a {bot.next_pos}")
 
     def find_alternative_action(self, bot):
         """ Encuentra una acción alternativa para el bot para evitar colisiones. """

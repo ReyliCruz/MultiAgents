@@ -111,7 +111,7 @@ class Environment(Model):
 
         if self.time_counter >= self.next_generation_time:
             self.time_counter = 0
-            self.next_generation_time = random.randint(15, 20)
+            self.next_generation_time = random.randint(10, 15)
             self.generate_and_queue_article()
 
         self.task_manager.assign_tasks_to_free_bots()
@@ -149,10 +149,10 @@ class Environment(Model):
         - x: Coordenada x del robot.
         - y: Coordenada y del robot.
         """
-        if self.grid.is_cell_empty((x, y)):
-            bot = Bot(bot_id, self)
-            self.grid.place_agent(bot, (x, y))
-            self.schedule.add(bot)
+        #if self.grid.is_cell_empty((x, y)):
+        bot = Bot(bot_id, self)
+        self.grid.place_agent(bot, (x, y))
+        self.schedule.add(bot)
 
     def add_goal(self, goal_id, x, y, goal_name):
         """

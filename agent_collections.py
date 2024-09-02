@@ -7,6 +7,8 @@ goals_collection = [
     (6, 20, 16, "Rack4"),
     (7, 25, 16, "Cargador1"),
     (8, 18, 12, "Cargador2"),
+    (9, 27, 8, "Cargador3"),
+    (10, 28, 8, "Cargador4"),
 ]
 
 bots_collection = [
@@ -14,8 +16,8 @@ bots_collection = [
     (102, 27, 8),
     (103, 28, 8),
     (104, 25, 8),
-    #(105, 24, 8),
-    #(106, 23, 8)
+    (105, 24, 8),
+    (106, 23, 8)
 ]
 
 articles_collection = [
