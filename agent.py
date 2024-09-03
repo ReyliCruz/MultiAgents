@@ -31,13 +31,13 @@ class Bot(Agent):
         self.task = None
         self.q_file = None
         self.history = []
-        self.battery = 100
+        self.battery = 9999999999999999999999 #100
         self.weight_box = 0
         self.low_battery = 35
         self.charger_name = ""
         self.charging = False
 
-        self.epsilon = 1.0
+        self.epsilon = 1.0 #0.1
         self.alpha = 0.1
         self.gamma = 0.9
 
@@ -60,9 +60,9 @@ class Bot(Agent):
         
         if (self.task and self.battery<self.low_battery and self.aux_target == ""):
             self.deliver_or_charge()
-        elif (self.target_goal_name == "" and (not self.task)):
+        #elif (self.target_goal_name == "" and (not self.task)):
             #self.charger_name = self.model.free_chargers.get()
-            print()
+            
 
         if self.state is None:
             self.state = self.model.states[self.pos]
@@ -71,23 +71,23 @@ class Bot(Agent):
         # Agent chooses an action from the policy
         #self.action = self.eps_greedy_policy(self.state)
 
-        self.action = self.greedy_policy(self.state)
+        #self.action = self.greedy_policy(self.state)
 
-        '''
+        
         # Guardar historial de posiciones
         self.history.append(self.pos)
         if len(self.history) > 10:  # Limitar el tamaño del historial
             self.history.pop(0)
         
         # Detectar oscilación
-        if self.detect_oscillation():
-            print(f"Bot {self.unique_id} detectó oscilación. Seleccionando acción aleatoria.")
-            self.backtrack(3)
+        if self.detect_oscillation_all_cases():
+            #print(f"Bot {self.unique_id} detectó oscilación. Seleccionando acción aleatoria.")
+            self.backtrack(1)
             self.action = self.random_policy()
         else:
             # Elegir acción normalmente con política epsilon-greedy
             self.action = self.greedy_policy(self.state)
-        '''
+        
 
         # Get the next position
         self.next_pos = self.perform(self.pos, self.action)
@@ -267,6 +267,50 @@ class Bot(Agent):
             
         return False
     
+    def detect_oscillation_all_cases(self):
+        """
+        Detecta si el bot está en un bucle de oscilación.
+        Retorna True si se detecta oscilación, False en caso contrario.
+        """
+        if self.target_goal_name == "":
+            return False
+
+        # Detectar oscilación lineal (arriba-abajo, izquierda-derecha)
+        if len(self.history) >= 4:
+            if (self.history[-1] == self.history[-3] and self.history[-2] == self.history[-4]):
+                print("Oscilación lineal detectada (vertical/horizontal)")
+                return True
+
+        # Detectar oscilación circular simple (cuadrado de 4 cuadros)
+        if len(self.history) >= 8:
+            if (self.history[-1] == self.history[-5] and
+                self.history[-2] == self.history[-6] and
+                self.history[-3] == self.history[-7] and
+                self.history[-4] == self.history[-8]):
+                print("Oscilación circular detectada (cuadrado de 4 cuadros)")
+                return True
+
+        # Detectar oscilaciones circulares más grandes (verificar patrones de 6, 8, 10 pasos, etc.)
+        for pattern_length in range(4, len(self.history) // 2 + 1):
+            if len(self.history) >= 2 * pattern_length:
+                pattern1 = self.history[-pattern_length:]
+                pattern2 = self.history[-2 * pattern_length:-pattern_length]
+                if pattern1 == pattern2:
+                    print(f"Oscilación circular detectada (patrón de {pattern_length} pasos)")
+                    return True
+
+        # Detectar otros tipos de patrones repetitivos
+        for length in range(2, len(self.history) // 2 + 1):
+            if len(self.history) >= 2 * length:
+                recent_pattern = self.history[-length:]
+                previous_pattern = self.history[-2 * length:-length]
+                if recent_pattern == previous_pattern:
+                    print(f"Patrón repetitivo detectado con longitud {length}")
+                    return True
+
+        return False
+
+        
     def backtrack(self, steps):
         """
         Retrocede una cantidad de pasos especificada.
@@ -328,7 +372,7 @@ class Bot(Agent):
         Calcula el costo de energía desde una posición específica a una meta basada en la distancia y el peso.
         """
         distance = abs(start_coords[0] - goal_coords[0]) + abs(start_coords[1] - goal_coords[1])
-        energy_cost = distance * ((1 + weight * 0.1)/2)
+        energy_cost = distance * ((1 + weight * 0.1)/2) + 3
         return energy_cost
 
 
