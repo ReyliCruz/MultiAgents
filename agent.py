@@ -2,6 +2,7 @@ from mesa.agent import Agent
 import numpy as np
 from queue import Queue
 import random
+from agent_collections import goals_collection
 
 class Bot(Agent):
 
@@ -32,6 +33,9 @@ class Bot(Agent):
         self.history = []
         self.battery = 100
         self.weight_box = 0
+        self.low_battery = 35
+        self.charger_name = ""
+        self.charging = False
 
         self.epsilon = 1.0
         self.alpha = 0.1
@@ -53,15 +57,22 @@ class Bot(Agent):
         if self.battery <= 0:
             print(f"Bot {self.unique_id} sin batería, no puede moverse.")
             return
+        
+        if (self.task and self.battery<self.low_battery and self.aux_target == ""):
+            self.deliver_or_charge()
+        elif (self.target_goal_name == "" and (not self.task)):
+            self.charger_name = self.model.free_chargers.get()
 
         if self.state is None:
             self.state = self.model.states[self.pos]
+        
 
         # Agent chooses an action from the policy
         #self.action = self.eps_greedy_policy(self.state)
 
-        #self.action = self.greedy_policy(self.state)
+        self.action = self.greedy_policy(self.state)
 
+        '''
         # Guardar historial de posiciones
         self.history.append(self.pos)
         if len(self.history) > 10:  # Limitar el tamaño del historial
@@ -69,29 +80,36 @@ class Bot(Agent):
         
         # Detectar oscilación
         if self.detect_oscillation():
-            # Si se detecta oscilación, forzar acción aleatoria
             print(f"Bot {self.unique_id} detectó oscilación. Seleccionando acción aleatoria.")
             self.backtrack(3)
             self.action = self.random_policy()
         else:
             # Elegir acción normalmente con política epsilon-greedy
             self.action = self.greedy_policy(self.state)
-        
+        '''
+
         # Get the next position
         self.next_pos = self.perform(self.pos, self.action)
         self.next_state = self.model.states[self.next_pos]
-
-        if (self.target_goal_name != ""):
+        
+        if (self.charging):
+            self.battery += 20
+            if self.battery >= 100:
+                self.battery = 100
+                self.charging = False
+                self.target_goal_name = self.aux_target
+                self.aux_target = ""
+                self.charger_name = ""
+        elif (self.target_goal_name != ""):
             self.battery = self.battery -  (1 + self.weight_box * 0.1)/2
+        
+
 
     def advance(self) -> None:
-        if not self.task:
+        if (self.target_goal_name == "") or self.charging:
             return
         
         article_id, weight, origin, destination = self.task
-
-        if self.target_goal_name == "":
-            return
         
         # Check if the agent can move to the next position
         if self.model.grid.is_cell_empty(self.next_pos) or (
@@ -101,16 +119,18 @@ class Bot(Agent):
         ):
             if self.next_state in self.model.goal_states:
 
+                if self.target_goal_name == self.charger_name and self.aux_target != "":
+                    self.target_goal_name = ""
+                    self.charging = True
+
                 # Verificar si el bot ha llegado al `origin`
                 if self.target_goal_name == origin and self.previous_target == "":
-                    #self.model.grid.remove_agent(self.model.grid.get_cell_list_contents(self.next_pos)[0])
                     self.weight_box = weight
                     self.target_goal_name = ""
                     self.previous_target = origin
 
                 # Verificar si el bot ha llegado al `destination`
                 elif self.target_goal_name == destination and self.previous_target == origin:
-                    #self.model.grid.remove_agent(self.model.grid.get_cell_list_contents(self.next_pos)[0])
                     self.weight_box = 0
                     self.done = True
                     self.target_goal_name = ""
@@ -163,7 +183,8 @@ class Bot(Agent):
 
             while not done:
                 training_step += 1
-                action = self.eps_greedy_policy(state)
+                #action = self.eps_greedy_policy(state)
+                action = self.random_policy()
 
                 next_pos = self.perform(pos, action)
                 next_state = self.model.states[next_pos]
@@ -186,7 +207,7 @@ class Bot(Agent):
                     pos = next_pos
                     state = next_state
             
-            self.epsilon = max(self.epsilon * 0.99, 0.01)
+            self.epsilon = max(self.epsilon * 0.999, 0.01)
 
         print(f"Episode {episode} finished in {training_step} steps with total return {total_return}.")
 
@@ -265,6 +286,49 @@ class Bot(Agent):
             return self.random.choice(empty_positions)
         else:
             raise ValueError("No hay posiciones vacías disponibles en la cuadrícula.")
+        
+    def deliver_or_charge(self):
+        """
+        Decide si es más viable para el bot entregar el paquete primero y luego cargar,
+        o ir directamente a cargar según la batería y el costo energético estimado.
+        """
+
+        self.charger_name = self.model.free_chargers.get()
+        print(f"Cargador: {self.charger_name} asignado a bot {self.unique_id}")
+
+        target_coords = next(((x, y) for (goal_id, x, y, name) in goals_collection if name == self.target_goal_name), None)
+        charger_coords = next(((x, y) for (goal_id, x, y, name) in goals_collection if name == self.charger_name), None)
+
+        # Calcular el costo energético estimado para ir al destino, dejar el paquete, y luego al cargador
+        if target_coords and charger_coords:
+            cost_to_target = self.calculate_energy_cost(self.pos, target_coords, self.weight_box)
+            cost_to_charger_from_target = self.calculate_energy_cost(target_coords, charger_coords, 0)  # Sin peso adicional después de dejar el paquete
+            total_cost_delivery_first = cost_to_target + cost_to_charger_from_target
+
+            # Calcular el costo de ir directamente al cargador
+            cost_to_charger_direct = self.calculate_energy_cost(self.pos, charger_coords, self.weight_box)
+
+            # Decidir en función de la energía necesaria y la batería restante
+            if total_cost_delivery_first < self.battery:
+                # Si es viable completar la tarea primero, continuar con la tarea
+                print(f"Bot {self.unique_id} decide entregar el paquete primero y luego ir a cargar.")
+                return
+            elif cost_to_charger_direct < self.battery:
+                # Si no es viable entregar primero, pero sí ir al cargador
+                print(f"Bot {self.unique_id} tiene batería baja ({self.battery}) y decide ir a '{self.charger_name}'.")
+                self.aux_target = self.target_goal_name
+
+            else:
+                # Si no puede hacer ninguna de las dos cosas, el bot debería esperar o buscar alternativas
+                print(f"Bot {self.unique_id} no tiene suficiente batería para ninguna acción. Quedando en espera.")
+
+    def calculate_energy_cost(self, start_coords, goal_coords, weight):
+        """
+        Calcula el costo de energía desde una posición específica a una meta basada en la distancia y el peso.
+        """
+        distance = abs(start_coords[0] - goal_coords[0]) + abs(start_coords[1] - goal_coords[1])
+        energy_cost = distance * ((1 + weight * 0.1)/2)
+        return energy_cost
 
 
 class Box(Agent):

@@ -5,7 +5,7 @@ from mesa.space import SingleGrid, MultiGrid
 from mesa.time import SimultaneousActivation
 from mesa.datacollection import DataCollector
 
-from agent_collections import goals_collection, bots_collection, articles_collection
+from agent_collections import goals_collection, bots_collection, articles_collection, chargers_collection
 
 import numpy as np
 import random
@@ -56,6 +56,10 @@ class Environment(Model):
         self.time_counter = 0  # Contador de tiempo para extraer artículos
         self.next_generation_time = 1  # Tiempo inicial aleatorio para extraer artículo
 
+        self.free_chargers = Queue()
+        for charger in chargers_collection:
+            self.free_chargers.put(charger)
+
         # Default environment description for the model
         self.train = train
         if desc is None:
@@ -104,9 +108,6 @@ class Environment(Model):
         )
 
     def step(self):
-
-        #self.task_manager.monitor_bots_collision()
-
         self.time_counter += 1
 
         if self.time_counter >= self.next_generation_time:
@@ -217,6 +218,44 @@ class Environment(Model):
                 origin_coords = next(((x, y) for (goal_id, x, y, name) in goals_collection if name == origin_name), None)
                 destination_coords = next(((x, y) for (goal_id, x, y, name) in goals_collection if name == destination_name), None)
 
+                if(agent.aux_target != ""):
+                    self.task_manager.assign_goal_to_bot(agent.unique_id, agent.charger_name)
+
+                    self.assign_rewards()
+
+                    # Verificar si el archivo de Q-values existe
+                    if os.path.exists(f"./q_values{agent.target_goal_name}.npy"):
+                        agent.q_file = f"q_values{agent.target_goal_name}.npy"
+                        agent.training_step = agent.MAX_NUM_TRAINING_STEPS  # Evitar entrenamiento adicional
+                        agent.load_q_values(agent.q_file)
+                    else:
+                        print(f"Archivo ./q_values{agent.target_goal_name}.npy no encontrado. Entrenando agente.")
+                        agent.train()  # Entrenar al agente si no existe el archivo de Q-values
+
+                else:
+                    if agent.target_goal_name == "" and agent.done == False:
+                        if agent.pos == origin_coords:
+                            # Si el bot ya está en el origen, asignar destino
+                            self.task_manager.assign_goal_to_bot(agent.unique_id, destination_name)
+                        else:
+                            # Si no, asignar origen
+                            self.task_manager.assign_goal_to_bot(agent.unique_id, origin_name)
+
+                        self.assign_rewards()
+
+                        # Verificar si el archivo de Q-values existe
+                        if os.path.exists(f"./q_values{agent.target_goal_name}.npy"):
+                            agent.q_file = f"q_values{agent.target_goal_name}.npy"
+                            agent.training_step = agent.MAX_NUM_TRAINING_STEPS  # Evitar entrenamiento adicional
+                            agent.load_q_values(agent.q_file)
+                        else:
+                            print(f"Archivo ./q_values{agent.target_goal_name}.npy no encontrado. Entrenando agente.")
+                            agent.train()  # Entrenar al agente si no existe el archivo de Q-values
+
+                        #agent.train()
+
+
+                '''
                 if origin_coords and destination_coords:
                     # Asignar el origen como meta inicial si aún no tiene ninguna meta asignada
                     if agent.target_goal_name == "" and agent.done == False:
@@ -242,3 +281,4 @@ class Environment(Model):
 
                 else:
                     print(f"Error: No se encontraron coordenadas para {origin_name} o {destination_name}")
+                '''
