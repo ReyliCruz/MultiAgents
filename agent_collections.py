@@ -18,13 +18,28 @@ chargers_collection = [
 
 bots_collection = [
     (101, 26, 8),
-    (102, 27, 8),
+    #(102, 27, 8),
     #(103, 28, 8),
     #(104, 25, 8),
     #(105, 24, 8),
     #(106, 23, 8)
 ]
 
+#Collection for test
+articles_collection = [
+    (201, 20, "Salida", "Rack2"),
+    (202, 15, "Rack3", "Salida"),
+    (203, 10, "Banda", "Rack1"),
+    (204, 10, "Rack4", "Banda"),
+    (205, 8, "Cargador1", "Rack3"),
+    (206, 5, "Cargador2", "Rack4"),
+    (207, 5, "Salida", "Cargador4"),
+    (208, 7, "Rack2", "Cargador3"),
+    (209, 9, "Rack1", "Cargador2"),
+    (210, 6, "Rack4", "Cargador4"),
+]
+
+'''
 articles_collection = [
     (201, 20, "Banda", "Rack1"),
     (202, 10, "Banda", "Salida"),
@@ -37,3 +52,4 @@ articles_collection = [
     #(209, 5, "Salida", "Cargador3"),
     #(210, 5, "Rack1", "Cargador4"),
 ]
+'''
