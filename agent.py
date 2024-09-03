@@ -61,7 +61,8 @@ class Bot(Agent):
         if (self.task and self.battery<self.low_battery and self.aux_target == ""):
             self.deliver_or_charge()
         elif (self.target_goal_name == "" and (not self.task)):
-            self.charger_name = self.model.free_chargers.get()
+            #self.charger_name = self.model.free_chargers.get()
+            print()
 
         if self.state is None:
             self.state = self.model.states[self.pos]
@@ -99,7 +100,7 @@ class Bot(Agent):
                 self.charging = False
                 self.target_goal_name = self.aux_target
                 self.aux_target = ""
-                self.charger_name = ""
+                #self.charger_name = ""
         elif (self.target_goal_name != ""):
             self.battery = self.battery -  (1 + self.weight_box * 0.1)/2
         
@@ -293,7 +294,7 @@ class Bot(Agent):
         o ir directamente a cargar según la batería y el costo energético estimado.
         """
 
-        self.charger_name = self.model.free_chargers.get()
+        #self.charger_name = self.model.free_chargers.get()
         print(f"Cargador: {self.charger_name} asignado a bot {self.unique_id}")
 
         target_coords = next(((x, y) for (goal_id, x, y, name) in goals_collection if name == self.target_goal_name), None)
