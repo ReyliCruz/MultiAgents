@@ -55,4 +55,11 @@ server = mesa.visualization.ModularServer(
     "AG-4", model_params, 6969
 )
 
-server.launch(open_browser=True)
+#server.launch(open_browser=True)
+
+def advance_simulation_step():
+    if server.model is not None:
+        server.model.step()
+
+if __name__ == '__main__':
+    server.launch(open_browser=True)
