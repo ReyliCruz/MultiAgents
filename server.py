@@ -63,3 +63,4 @@ def advance_simulation_step():
 
 if __name__ == '__main__':
     server.launch(open_browser=True)
+    server.model.run_model()

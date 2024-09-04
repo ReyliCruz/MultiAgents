@@ -31,7 +31,7 @@ class Bot(Agent):
         self.task = None
         self.q_file = None
         self.history = []
-        self.battery = 9999999999999999999999 #100
+        self.battery = 100 #100
         self.weight_box = 0
         self.low_battery = 35
         self.charger_name = ""
@@ -60,8 +60,8 @@ class Bot(Agent):
         
         if (self.task and self.battery<self.low_battery and self.aux_target == ""):
             self.deliver_or_charge()
-        #elif (self.target_goal_name == "" and (not self.task)):
-            #self.charger_name = self.model.free_chargers.get()
+        elif (self.target_goal_name == "" and (not self.task)) and self.battery < 100:
+            self.aux_target = "_"
             
 
         if self.state is None:
@@ -73,19 +73,15 @@ class Bot(Agent):
 
         #self.action = self.greedy_policy(self.state)
 
-        
-        # Guardar historial de posiciones
+
         self.history.append(self.pos)
-        if len(self.history) > 10:  # Limitar el tamaño del historial
+        if len(self.history) > 10:
             self.history.pop(0)
-        
-        # Detectar oscilación
+
         if self.detect_oscillation_all_cases():
-            #print(f"Bot {self.unique_id} detectó oscilación. Seleccionando acción aleatoria.")
             self.backtrack(1)
             self.action = self.random_policy()
         else:
-            # Elegir acción normalmente con política epsilon-greedy
             self.action = self.greedy_policy(self.state)
         
 
@@ -98,7 +94,8 @@ class Bot(Agent):
             if self.battery >= 100:
                 self.battery = 100
                 self.charging = False
-                self.target_goal_name = self.aux_target
+                if self.aux_target != "_":
+                    self.target_goal_name = self.aux_target
                 self.aux_target = ""
                 #self.charger_name = ""
         elif (self.target_goal_name != ""):
@@ -166,7 +163,7 @@ class Bot(Agent):
         #inital_pos = self.pos
         #initial_state = self.model.states[inital_pos]
 
-        for episode in range(1000):
+        for episode in range(10000):
             training_step = 0
             done = False
             total_return = 0
@@ -275,13 +272,11 @@ class Bot(Agent):
         if self.target_goal_name == "":
             return False
 
-        # Detectar oscilación lineal (arriba-abajo, izquierda-derecha)
         if len(self.history) >= 4:
             if (self.history[-1] == self.history[-3] and self.history[-2] == self.history[-4]):
                 print("Oscilación lineal detectada (vertical/horizontal)")
                 return True
 
-        # Detectar oscilación circular simple (cuadrado de 4 cuadros)
         if len(self.history) >= 8:
             if (self.history[-1] == self.history[-5] and
                 self.history[-2] == self.history[-6] and
@@ -290,7 +285,6 @@ class Bot(Agent):
                 print("Oscilación circular detectada (cuadrado de 4 cuadros)")
                 return True
 
-        # Detectar oscilaciones circulares más grandes (verificar patrones de 6, 8, 10 pasos, etc.)
         for pattern_length in range(4, len(self.history) // 2 + 1):
             if len(self.history) >= 2 * pattern_length:
                 pattern1 = self.history[-pattern_length:]
@@ -299,7 +293,6 @@ class Bot(Agent):
                     print(f"Oscilación circular detectada (patrón de {pattern_length} pasos)")
                     return True
 
-        # Detectar otros tipos de patrones repetitivos
         for length in range(2, len(self.history) // 2 + 1):
             if len(self.history) >= 2 * length:
                 recent_pattern = self.history[-length:]
@@ -318,7 +311,7 @@ class Bot(Agent):
         if len(self.history) > steps:
             backtrack_pos = self.history[-(steps + 1)]
             self.model.grid.move_agent(self, backtrack_pos)
-            self.history = self.history[:-steps]  # Limpiar historial reciente después de retroceder
+            self.history = self.history[:-steps]
 
     def find_random_empty_position(self):
         """ Encuentra una posición aleatoria vacía en la cuadrícula. """
@@ -338,33 +331,26 @@ class Bot(Agent):
         o ir directamente a cargar según la batería y el costo energético estimado.
         """
 
-        #self.charger_name = self.model.free_chargers.get()
         print(f"Cargador: {self.charger_name} asignado a bot {self.unique_id}")
 
         target_coords = next(((x, y) for (goal_id, x, y, name) in goals_collection if name == self.target_goal_name), None)
         charger_coords = next(((x, y) for (goal_id, x, y, name) in goals_collection if name == self.charger_name), None)
 
-        # Calcular el costo energético estimado para ir al destino, dejar el paquete, y luego al cargador
         if target_coords and charger_coords:
             cost_to_target = self.calculate_energy_cost(self.pos, target_coords, self.weight_box)
             cost_to_charger_from_target = self.calculate_energy_cost(target_coords, charger_coords, 0)  # Sin peso adicional después de dejar el paquete
             total_cost_delivery_first = cost_to_target + cost_to_charger_from_target
 
-            # Calcular el costo de ir directamente al cargador
             cost_to_charger_direct = self.calculate_energy_cost(self.pos, charger_coords, self.weight_box)
 
-            # Decidir en función de la energía necesaria y la batería restante
             if total_cost_delivery_first < self.battery:
-                # Si es viable completar la tarea primero, continuar con la tarea
                 print(f"Bot {self.unique_id} decide entregar el paquete primero y luego ir a cargar.")
                 return
             elif cost_to_charger_direct < self.battery:
-                # Si no es viable entregar primero, pero sí ir al cargador
                 print(f"Bot {self.unique_id} tiene batería baja ({self.battery}) y decide ir a '{self.charger_name}'.")
                 self.aux_target = self.target_goal_name
 
             else:
-                # Si no puede hacer ninguna de las dos cosas, el bot debería esperar o buscar alternativas
                 print(f"Bot {self.unique_id} no tiene suficiente batería para ninguna acción. Quedando en espera.")
 
     def calculate_energy_cost(self, start_coords, goal_coords, weight):
@@ -421,7 +407,6 @@ class TaskManager:
                 break
 
         if bot and goal:
-            # Asignar la meta al bot
             bot.target_goal_name = goal_name
             bot.rewards = {state: 1 if state == goal.pos else -1 for state in self.environment.states.values()}
             #print(f"Meta '{bot.target_goal_name}' asignada al bot {bot.unique_id}.")
@@ -507,8 +492,8 @@ class TaskManager:
         
         # Asignar artículos a bots libres desde la cola
         while not self.environment.articles_queue.empty() and not free_bots_queue.empty():
-            article = self.environment.articles_queue.get()  # Obtener el primer artículo de la cola de artículos
-            bot = free_bots_queue.get()  # Obtener el siguiente bot libre de la cola de bots libres
+            article = self.environment.articles_queue.get()
+            bot = free_bots_queue.get()
 
             bot.task = article
             bot.isFree = False
@@ -519,7 +504,6 @@ class TaskManager:
 
     def manage_bot_movements(self):
         """ Gestiona y coordina los movimientos de los bots para evitar colisiones. """
-        # Diccionario para almacenar la posición futura planificada de cada bot
         planned_positions = {}
 
         # Iterar sobre todos los bots en el entorno
@@ -542,8 +526,7 @@ class TaskManager:
         for pos, bots_in_pos in planned_positions.items():
             if len(bots_in_pos) > 1:
                 # Hay más de un bot planeando moverse a la misma posición
-                #print(f"Colisión prevista en posición {pos} entre los bots {[bot.unique_id for bot in bots_in_pos]}")
-                
+
                 for bot in bots_in_pos:
                     # Replanificar la acción para cada bot involucrado
                     bot.action = self.find_alternative_action(bot)
