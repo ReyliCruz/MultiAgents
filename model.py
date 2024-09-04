@@ -218,11 +218,14 @@ class Environment(Model):
                 origin_coords = next(((x, y) for (goal_id, x, y, name) in goals_collection if name == origin_name), None)
                 destination_coords = next(((x, y) for (goal_id, x, y, name) in goals_collection if name == destination_name), None)
 
+                '''
                 if (agent.charger_name == ""):
                     agent.charger_name = self.free_chargers.get()
                 elif (agent.battery >= 100):
                     self.free_chargers.put(agent.charger_name)
                     agent.charger_name = ""
+                '''
+                    
 
                 if(agent.aux_target != ""):
                     self.task_manager.assign_goal_to_bot(agent.unique_id, agent.charger_name)

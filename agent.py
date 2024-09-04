@@ -31,7 +31,7 @@ class Bot(Agent):
         self.task = None
         self.q_file = None
         self.history = []
-        self.battery = 100 #100
+        self.battery = 999999999 #100
         self.weight_box = 0
         self.low_battery = 35
         self.charger_name = ""
@@ -79,7 +79,7 @@ class Bot(Agent):
             self.history.pop(0)
 
         if self.detect_oscillation_all_cases():
-            self.backtrack(1)
+            #self.backtrack(1)
             self.action = self.random_policy()
         else:
             self.action = self.greedy_policy(self.state)
