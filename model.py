@@ -14,7 +14,8 @@ import os
 
 
 class Environment(Model):
-    DEFAULT_MODEL_DESC = [
+    '''
+    DEFAULT_MODEL_DESC_OLD_VERSION = [
         'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
         'BBBBBBBBBBBFFBBFBBFBBBBBBFFFFB',
         'BBBBBBBBBBBFFBBFBBFBBBBBBFFFFB',
@@ -45,6 +46,40 @@ class Environment(Model):
         'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
         'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
         'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB'
+    ]
+    '''
+
+    DEFAULT_MODEL_DESC = [
+        'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+        'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+        'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+        'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+        'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+        'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+        'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+        'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+        'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+        'BFFFFFFFBBBBBBBBBBBBBBBBBBBBBB',
+        'BFFFFFFFFBBFFFFFFFFFBBBBBBBBBB',
+        'BFFFFFFFFBBFFFFFFFFFBBBBBBBBBB',
+        'BFFFFFFFFFFFFFFFFFFFBBBBBBBBBB',
+        'BFFFFFFFFFFFFFFFFFFFBBBBBBBBBB',
+        'BFFFFFFFFFFFFFFFFFFFBBBBFFFFBB',
+        'BFFFFFFFFFFFFFFFBBFFBBBBFFFFBB',
+        'BFFFFFFFFBBBFFFFBBFFBBBBFFFFBB',
+        'BFFFFFFFFBBBBFFFFFFFFFFFFFFFBB',
+        'BBBBBBBBBBBBBFFFBBFFFFFFFFFFBB', #'BBBBBBBBBBBBBFFFBBFBBFFFFFFFBB',
+        'BBBBBBBBBBFFFFFFBBFBBFFFFFFFBB',
+        'BFFFFFFFFFFFFFFFFFFFFFFFFFFFBB',
+        'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
+        'BFFFFFFFFFFFFFFBBBBBFFFFFFFFFB',
+        'BFFFFFFFFFFFFFFBBBBBFFFFFFFFFB',
+        'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
+        'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
+        'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
+        'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
+        'BFFFFFFFFFFBBBBBBBBBBBBBFFFFFB',
+        'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
     ]
 
     def __init__(self, desc=None, q_file=None, train=False):
@@ -108,6 +143,35 @@ class Environment(Model):
             model_reporters=reporters
         )
 
+    def collect_robot_data(self):
+        """Registra la posición actual y la batería de los robots en cada paso."""
+        robots_data = []
+        for agent in self.schedule.agents:
+            if isinstance(agent, Bot):
+                # Si es el primer paso, registrar la posición inicial
+                if len(self.data["robots"]) < len(self.schedule.agents):
+                    robot_info = {
+                        "spawnPosition": {
+                            "x": agent.pos[0],
+                            "y": agent.pos[1]
+                        },
+                        "path": []
+                    }
+                    self.data["robots"].append(robot_info)
+
+                # Registrar el camino y la batería en cada paso
+                robot_path = {
+                    "x": agent.pos[0],
+                    "y": agent.pos[1],
+                    "battery": agent.battery
+                }
+
+                robots_data.append(robot_path)
+
+        # Agregar los caminos de los robots al json
+        for i, robot_info in enumerate(self.data["robots"]):
+            robot_info["path"].append(robots_data[i])
+
     def step(self):
         self.time_counter += 1
 
@@ -120,7 +184,7 @@ class Environment(Model):
 
         self.assign_goals_to_bots_extended_version()
 
-        #self.task_manager.manage_bot_movements()
+        self.task_manager.manage_bot_movements()
 
         self.datacollector.collect(self)
 
@@ -283,14 +347,13 @@ class Environment(Model):
                 origin_coords = next(((x, y) for (goal_id, x, y, name) in goals_collection if name == origin_name), None)
                 destination_coords = next(((x, y) for (goal_id, x, y, name) in goals_collection if name == destination_name), None)
 
-                '''
+                
                 if (agent.charger_name == ""):
                     agent.charger_name = self.free_chargers.get()
                 elif (agent.battery >= 100):
                     self.free_chargers.put(agent.charger_name)
                     agent.charger_name = ""
-                '''
-                    
+                
 
                 if(agent.aux_target != ""):
                     self.task_manager.assign_goal_to_bot(agent.unique_id, agent.charger_name)
@@ -314,8 +377,9 @@ class Environment(Model):
                         team_members = next((team for team in self.bot_teams if agent in team), [])
                         
                         # Si todos los miembros del equipo están en el origen, asignarles el destino
-                        if all([bot.pos == origin_coords for bot in team_members]):
+                        if all([bot.pos == next(((x, y) for (goal_id, x, y, name) in goals_collection if name == bot.task[2]), None) for bot in team_members]):
                             for bot in team_members:
+                                bot.team_formation = True
                                 self.task_manager.assign_goal_to_bot(bot.unique_id, destination_name)
                             print(f"Equipo con el líder {agent.unique_id} ha llegado al origen. Asignando destino.")
 
