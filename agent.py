@@ -36,6 +36,9 @@ class Bot(Agent):
         self.low_battery = 35
         self.charger_name = ""
         self.charging = False
+        self.in_team_mode = False  # Indica si el bot está en modo equipo
+        self.team_size = 0  # Tamaño del equipo (2 o 4 bots)
+        self.path = []
 
         self.epsilon = 1.0 #0.1
         self.alpha = 0.1
@@ -73,7 +76,7 @@ class Bot(Agent):
 
         #self.action = self.greedy_policy(self.state)
 
-
+        '''
         self.history.append(self.pos)
         if len(self.history) > 10:
             self.history.pop(0)
@@ -83,11 +86,70 @@ class Bot(Agent):
             self.action = self.random_policy()
         else:
             self.action = self.greedy_policy(self.state)
-        
 
         # Get the next position
         self.next_pos = self.perform(self.pos, self.action)
         self.next_state = self.model.states[self.next_pos]
+        '''
+
+        # Si el bot está en equipo, buscar al líder en la lista de equipos
+        if self.in_team_mode:
+            leader_bot = self.get_leader_from_team()
+
+            if leader_bot and leader_bot.unique_id != self.unique_id:
+                # Copiar la acción del líder y ajustar posición en el equipo
+                self.action = leader_bot.action
+                self.adjust_team_position(leader_bot)
+            else:
+                # Si el bot es el líder, usa A* para encontrar el camino al objetivo
+                if self.target_goal_name:
+                    goal_coords = next(((x, y) for (goal_id, x, y, name) in goals_collection if name == self.target_goal_name), None)
+                    if goal_coords:
+                        if not self.path or self.path[-1] != goal_coords:
+                            self.path = self.a_star_team_with_retries(self.pos, goal_coords)
+                        
+                        if self.path:
+                            self.next_pos = self.path.pop(0)  # Tomar el siguiente paso en el camino
+                            self.next_state = self.model.states[self.next_pos]
+                            self.action = None  # No es necesario definir acción, ya que estamos siguiendo el camino
+                        else:
+                            print(f"El líder {self.unique_id} no puede encontrar un camino hacia el objetivo.")
+
+
+                '''
+                # Si el bot es el líder, toma decisiones
+                self.history.append(self.pos)
+                if len(self.history) > 10:
+                    self.history.pop(0)
+
+                if self.detect_oscillation_all_cases():
+                    self.action = self.random_policy()
+                else:
+                    self.action = self.greedy_policy(self.state)
+
+                # Obtener la siguiente posición
+                self.next_pos = self.perform(self.pos, self.action)
+                self.next_state = self.model.states[self.next_pos]
+                '''
+        
+        else:
+            # Si no está en equipo, funciona normalmente
+            self.history.append(self.pos)
+            if len(self.history) > 10:
+                self.history.pop(0)
+            '''
+            if self.detect_oscillation_all_cases():
+                self.action = self.random_policy()
+            else:
+                self.action = self.greedy_policy(self.state)
+
+            '''
+            self.action = self.greedy_policy(self.state)
+
+            # Obtener la siguiente posición
+            self.next_pos = self.perform(self.pos, self.action)
+            self.next_state = self.model.states[self.next_pos]
+        
         
         if (self.charging):
             self.battery += 20
@@ -102,12 +164,73 @@ class Bot(Agent):
             self.battery = self.battery -  (1 + self.weight_box * 0.1)/2
         
 
+    def get_leader_from_team(self):
+        """
+        Busca y retorna el líder de su equipo desde la lista bot_teams en el modelo.
+        """
+        for team in self.model.bot_teams:
+            if self in team:
+                return team[0]  # El primer bot en el equipo es el líder
+        return None  # No pertenece a ningún equipo
+    
+    def get_team_from_leader(self, leader_bot):
+        """
+        Obtiene el equipo del líder bot desde la lista de equipos en el modelo.
+        """
+        for team in self.model.bot_teams:
+            if leader_bot in team:
+                return team
+        return None
+
+    def adjust_team_position(self, leader_bot):
+        """
+        Ajusta la posición del bot en relación con el líder para formar un cuadro o pareja.
+        El equipo tiene el siguiente patrón:
+        - Bot 0 (líder): posición original
+        - Bot 1: a la derecha del líder (si el equipo tiene 2 o 4 miembros)
+        - Bot 2: abajo del líder (solo si el equipo tiene 4 miembros)
+        - Bot 3: en la esquina inferior derecha (solo si el equipo tiene 4 miembros)
+        """
+        team = self.get_team_from_leader(leader_bot)
+        
+        if team is not None:
+            leader_pos = leader_bot.pos
+
+            # Encontrar la posición del bot en el equipo
+            index_in_team = team.index(self)
+
+            if self.team_size == 2:
+                if index_in_team == 1:  # Bot a la derecha del líder (equipo de 2 bots)
+                    self.next_pos = (leader_pos[0] + 1, leader_pos[1])  # Derecha
+
+            elif self.team_size == 4:
+                if index_in_team == 1:  # Bot a la derecha del líder
+                    self.next_pos = (leader_pos[0] + 1, leader_pos[1])  # Derecha
+                elif index_in_team == 2:  # Bot abajo del líder
+                    self.next_pos = (leader_pos[0], leader_pos[1] - 1)  # Abajo
+                elif index_in_team == 3:  # Bot en la esquina inferior derecha
+                    self.next_pos = (leader_pos[0] + 1, leader_pos[1] - 1)  # Derecha y abajo
+
+            # Actualizar el siguiente estado
+            self.next_state = self.model.states[self.next_pos]
+
 
     def advance(self) -> None:
         if (self.target_goal_name == "") or self.charging:
             return
         
         article_id, weight, origin, destination = self.task
+
+        # Si el bot está en equipo, seguir al líder
+        if self.in_team_mode:
+            leader_bot = self.get_leader_from_team()
+
+            if leader_bot and leader_bot.unique_id != self.unique_id:
+                # Ajustar la posición relativa al líder
+                self.adjust_team_position(leader_bot)
+                self.model.grid.move_agent(self, self.next_pos)
+                self.state = self.next_state
+                return
         
         # Check if the agent can move to the next position
         if self.model.grid.is_cell_empty(self.next_pos) or (
@@ -160,6 +283,7 @@ class Bot(Agent):
         np.save(f"./q_values{self.target_goal_name}.npy", self.q_values)
 
     def train(self):
+        self.epsilon = 1.0
         #inital_pos = self.pos
         #initial_state = self.model.states[inital_pos]
 
@@ -181,8 +305,8 @@ class Bot(Agent):
 
             while not done:
                 training_step += 1
-                #action = self.eps_greedy_policy(state)
-                action = self.random_policy()
+                action = self.eps_greedy_policy(state)
+                #action = self.random_policy()
 
                 next_pos = self.perform(pos, action)
                 next_state = self.model.states[next_pos]
@@ -205,7 +329,8 @@ class Bot(Agent):
                     pos = next_pos
                     state = next_state
             
-            self.epsilon = max(self.epsilon * 0.999, 0.01)
+            #self.epsilon = max(self.epsilon * 0.999, 0.01)
+            self.epsilon = max(self.epsilon * 0.9999, 0.01)
 
         print(f"Episode {episode} finished in {training_step} steps with total return {total_return}.")
 
@@ -242,10 +367,11 @@ class Bot(Agent):
         return np.argmax(q_values)
 
     def _update_q_values(self, state, action, reward, next_state):
-        q_values = [self.q_values[next_state, action] for action in range(self.NUM_OF_ACTIONS)]
-        max_q_value = np.max(q_values)
-        self.q_values[state, action] += self.alpha * (
-                reward + self.gamma * max_q_value - self.q_values[state, action])
+        if action is not None:
+            q_values = [self.q_values[next_state, action] for action in range(self.NUM_OF_ACTIONS)]
+            max_q_value = np.max(q_values)
+            self.q_values[state, action] += self.alpha * (
+                    reward + self.gamma * max_q_value - self.q_values[state, action])
         
     def detect_oscillation(self):
         """
@@ -360,6 +486,218 @@ class Bot(Agent):
         distance = abs(start_coords[0] - goal_coords[0]) + abs(start_coords[1] - goal_coords[1])
         energy_cost = distance * ((1 + weight * 0.1)/2) + 3
         return energy_cost
+
+
+
+    def manhattan_heuristic(self, pos, goal):
+        return abs(pos[0] - goal[0]) + abs(pos[1] - goal[1])
+    
+    def a_star(self, start, goal):
+        # Listas de nodos abiertos y cerrados
+        open_list = []
+        closed_list = set()
+
+        # Añadir el nodo inicial a la lista abierta
+        open_list.append((0 + self.manhattan_heuristic(start, goal), 0, start, None))
+
+        while open_list:
+            # Ordenar la lista abierta por f = g + h y seleccionar el nodo con menor f
+            open_list.sort(key=lambda x: x[0])
+            f, g, current, parent = open_list.pop(0)
+
+            # Si alcanzamos el objetivo, reconstruimos el camino
+            if current == goal:
+                path = []
+                while parent is not None:
+                    path.append(current)
+                    current = parent
+                    parent = next((p for f, g, c, p in closed_list if c == current), None)
+                path.reverse()
+                return path
+
+            # Añadir el nodo actual a la lista cerrada
+            closed_list.add((f, g, current, parent))
+
+            # Iterar sobre vecinos
+            for neighbor in self.model.grid.iter_neighborhood(current, moore=False, include_center=False):
+                if self.model.grid.is_cell_empty(neighbor) or neighbor == goal:
+                    g_new = g + 1  # Distancia desde el inicio hasta el vecino
+                    h_new = self.manhattan_heuristic(neighbor, goal)
+                    f_new = g_new + h_new
+
+                    # Si el vecino ya está en la lista cerrada, saltarlo
+                    if any(neighbor == c for f, g, c, p in closed_list):
+                        continue
+
+                    # Si el vecino ya está en la lista abierta con un f mayor, actualizarlo
+                    existing_node = next((i for i, (f, g, c, p) in enumerate(open_list) if c == neighbor), None)
+                    if existing_node is not None:
+                        if open_list[existing_node][0] > f_new:
+                            open_list[existing_node] = (f_new, g_new, neighbor, current)
+                    else:
+                        open_list.append((f_new, g_new, neighbor, current))
+
+        return []
+
+    def a_star_team(self, start, goal):
+        """
+        Algoritmo A* para el líder del equipo.
+        Verifica que las posiciones a la derecha, abajo derecha y abajo estén libres para el equipo.
+        """
+        # Listas de nodos abiertos y cerrados
+        open_list = []
+        closed_list = set()
+
+        # Añadir el nodo inicial a la lista abierta
+        open_list.append((0 + self.manhattan_heuristic(start, goal), 0, start, None))
+
+        while open_list:
+            # Ordenar la lista abierta por f = g + h y seleccionar el nodo con menor f
+            open_list.sort(key=lambda x: x[0])
+            f, g, current, parent = open_list.pop(0)
+
+            # Si alcanzamos el objetivo, reconstruimos el camino
+            if current == goal:
+                path = []
+                while parent is not None:
+                    path.append(current)
+                    current = parent
+                    parent = next((p for f, g, c, p in closed_list if c == current), None)
+                path.reverse()
+                return path
+
+            # Añadir el nodo actual a la lista cerrada
+            closed_list.add((f, g, current, parent))
+
+            # Iterar sobre vecinos
+            for neighbor in self.model.grid.iter_neighborhood(current, moore=False, include_center=False):
+                # Verificar si el líder y los otros tres espacios están libres
+                if self.is_team_formation_valid(neighbor):
+                    g_new = g + 1  # Distancia desde el inicio hasta el vecino
+                    h_new = self.manhattan_heuristic(neighbor, goal)
+                    f_new = g_new + h_new
+
+                    # Si el vecino ya está en la lista cerrada, saltarlo
+                    if any(neighbor == c for f, g, c, p in closed_list):
+                        continue
+
+                    # Si el vecino ya está en la lista abierta con un f mayor, actualizarlo
+                    existing_node = next((i for i, (f, g, c, p) in enumerate(open_list) if c == neighbor), None)
+                    if existing_node is not None:
+                        if open_list[existing_node][0] > f_new:
+                            open_list[existing_node] = (f_new, g_new, neighbor, current)
+                    else:
+                        open_list.append((f_new, g_new, neighbor, current))
+
+        return []  # Si no se encuentra un camino, retornar una lista vacía
+
+
+    def is_team_formation_valid(self, leader_pos):
+        """
+        Verifica si la formación del equipo es válida a partir de la posición del líder.
+        El equipo sigue el patrón:
+        - Bot 1 a la derecha
+        - Bot 2 abajo
+        - Bot 3 abajo a la derecha
+        """
+        # Posiciones donde deben estar los otros bots del equipo
+        right_pos = (leader_pos[0] + 1, leader_pos[1])  # A la derecha
+        down_pos = (leader_pos[0], leader_pos[1] - 1)  # Abajo
+        down_right_pos = (leader_pos[0] + 1, leader_pos[1] - 1)  # Abajo a la derecha
+
+        # Verificar que todas las posiciones están vacías o contienen a otro bot del equipo
+        return (self.model.grid.is_cell_empty(right_pos) or self.is_team_member_at(right_pos)) and \
+            (self.model.grid.is_cell_empty(down_pos) or self.is_team_member_at(down_pos)) and \
+            (self.model.grid.is_cell_empty(down_right_pos) or self.is_team_member_at(down_right_pos))
+
+
+    def is_team_member_at(self, pos):
+        """
+        Verifica si hay un miembro del equipo en una posición dada.
+        """
+        for agent in self.model.grid.get_cell_list_contents([pos]):
+            if isinstance(agent, Bot) and agent.in_team_mode:
+                return True
+        return False
+
+    def a_star_team_with_retries(self, start, goal, max_retries=4):
+        """
+        Algoritmo A* para el líder del equipo con intentos de ajuste. Si no se encuentra el camino, 
+        reintenta con ajustes ligeros en la posición de inicio moviéndose una unidad en diferentes direcciones.
+        """
+        def find_path(start_pos):
+            open_list = []
+            closed_list = set()
+
+            # Añadir el nodo inicial a la lista abierta
+            open_list.append((0 + self.manhattan_heuristic(start_pos, goal), 0, start_pos, None))
+
+            while open_list:
+                # Ordenar la lista abierta por f = g + h y seleccionar el nodo con menor f
+                open_list.sort(key=lambda x: x[0])
+                f, g, current, parent = open_list.pop(0)
+
+                # Si alcanzamos el objetivo, reconstruimos el camino
+                if current == goal:
+                    path = []
+                    while parent is not None:
+                        path.append(current)
+                        current = parent
+                        parent = next((p for f, g, c, p in closed_list if c == current), None)
+                    path.reverse()
+                    return path
+
+                # Añadir el nodo actual a la lista cerrada
+                closed_list.add((f, g, current, parent))
+
+                # Explorar los vecinos
+                for neighbor in self.model.grid.iter_neighborhood(current, moore=False, include_center=False):
+                    if self.is_team_formation_valid(neighbor):
+                        g_new = g + 1
+                        h_new = self.manhattan_heuristic(neighbor, goal)
+                        f_new = g_new + h_new
+
+                        # Si el vecino ya está en la lista cerrada, saltarlo
+                        if any(neighbor == c for f, g, c, p in closed_list):
+                            continue
+
+                        # Si el vecino ya está en la lista abierta con un f mayor, actualizarlo
+                        existing_node = next((i for i, (f, g, c, p) in enumerate(open_list) if c == neighbor), None)
+                        if existing_node is not None:
+                            if open_list[existing_node][0] > f_new:
+                                open_list[existing_node] = (f_new, g_new, neighbor, current)
+                        else:
+                            open_list.append((f_new, g_new, neighbor, current))
+
+            return []
+
+        # Intentar encontrar el camino con la posición original
+        path = find_path(start)
+
+        # Si no se encuentra camino, intentar con desplazamientos en diferentes direcciones
+        if not path:
+            print(f"Líder {self.unique_id} no encontró un camino directo. Intentando ajustes...")
+            # Desplazamientos posibles: derecha, izquierda, arriba, abajo
+            adjustments = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+            retries = 0
+
+            for adjustment in adjustments:
+                retries += 1
+                adjusted_start = (start[0] + adjustment[0], start[1] + adjustment[1])
+
+                if self.model.grid.is_cell_empty(adjusted_start):  # Solo intentar si la celda ajustada está vacía
+                    path = find_path(adjusted_start)
+                    if path:
+                        print(f"Líder {self.unique_id} encontró un camino ajustando en dirección {adjustment}.")
+                        return path
+
+                if retries >= max_retries:
+                    break
+
+        return path  # Si no encuentra camino, retorna el camino fallido o vacío
+
+
+
 
 
 class Box(Agent):
@@ -500,6 +838,75 @@ class TaskManager:
             bot.done = False
             print(f"Tarea {article} asignada al bot {bot.unique_id}")
 
+    def assign_tasks_to_free_bots_extended_version(self):
+        """
+        Asigna tareas de la cola de artículos a los bots libres. 
+        Si el artículo pesa más de 10 kg, asigna un equipo de bots.
+        """
+        free_bots_queue = self.get_free_bots_queue()
+        
+        # Asignar artículos a bots libres desde la cola
+        while not self.environment.articles_queue.empty() and not free_bots_queue.empty():
+            article = self.environment.articles_queue.get()
+            article_id, weight, origin_name, destination_name = article
+
+            # Si el peso es menor o igual a 10, asignar un solo bot
+            if weight <= 10:
+                bot = free_bots_queue.get()
+                bot.task = article
+                bot.isFree = False
+                bot.done = False
+                print(f"Tarea {article} asignada al bot {bot.unique_id}")
+
+            # Si el peso está entre 10 y 20, asignar un equipo de 2 bots
+            elif 10 < weight <= 20:
+                team_size = 2
+                team_members = self.assign_team_to_article(team_size, article, free_bots_queue)
+                if team_members:
+                    print(f"Equipo de {team_size} bots asignado a tarea {article_id} ({weight} kg).")
+                else:
+                    print(f"No hay suficientes bots libres para la tarea {article_id}. Reinsertando en la cola.")
+                    self.environment.articles_queue.put(article)
+
+            # Si el peso es mayor a 20, asignar un equipo de 4 bots
+            elif weight > 20:
+                team_size = 4
+                team_members = self.assign_team_to_article(team_size, article, free_bots_queue)
+                if team_members:
+                    print(f"Equipo de {team_size} bots asignado a tarea {article_id} ({weight} kg).")
+                else:
+                    print(f"No hay suficientes bots libres para la tarea {article_id}. Reinsertando en la cola.")
+                    self.environment.articles_queue.put(article)
+
+    def assign_team_to_article(self, team_size, article, free_bots_queue):
+        """
+        Asigna un equipo de bots a una tarea de equipo.
+        Si no hay suficientes bots libres, los reingresa en la cola y retorna None.
+        """
+        team_members = []
+
+        # Intentar obtener un equipo completo
+        for _ in range(team_size):
+            if not free_bots_queue.empty():
+                bot = free_bots_queue.get()
+                team_members.append(bot)
+            else:
+                # No hay suficientes bots, devolver los que ya hemos sacado a la cola
+                for bot in team_members:
+                    free_bots_queue.put(bot)
+                return None
+
+        self.environment.bot_teams.append(team_members)
+
+        # Si se obtiene un equipo completo, asignar la tarea a todos los bots del equipo
+        for bot in team_members:
+            bot.task = article
+            bot.isFree = False
+            bot.done = False
+            bot.in_team_mode = True
+            bot.team_size = team_size
+
+        return team_members
 
 
     def manage_bot_movements(self):
@@ -553,3 +960,27 @@ class TaskManager:
             if isinstance(agent, Bot) and agent.pos == pos:
                 return True
         return False
+
+    def manage_team_movements(self):
+        """
+        Gestiona los movimientos de los equipos de bots. El líder del equipo toma las decisiones
+        y el resto de los miembros copian sus movimientos.
+        """
+        for team in self.environment.bot_teams:
+            if team:
+                leader = team[0]  # El primer bot del equipo es el líder
+                self.synchronize_team_with_leader(leader, team)
+
+    def synchronize_team_with_leader(self, leader, team):
+        """
+        Hace que todos los miembros del equipo sigan los movimientos del líder.
+        """
+        # Si el líder tiene una acción asignada, el resto del equipo debe copiarla
+        if leader.target_name_goal != "":
+            if leader.action is not None:
+                for bot in team[1:]:  # Excluir al líder (primer bot)
+                    bot.action = leader.action
+                    bot.next_pos = leader.next_pos
+                    bot.next_state = leader.next_state
+            else:
+                print(f"El líder del equipo {leader.unique_id} no tiene una acción válida.")

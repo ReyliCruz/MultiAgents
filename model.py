@@ -55,6 +55,7 @@ class Environment(Model):
         self.articles_queue = Queue()  # Cola para almacenar artículos
         self.time_counter = 0  # Contador de tiempo para extraer artículos
         self.next_generation_time = 1  # Tiempo inicial aleatorio para extraer artículo
+        self.bot_teams = []
 
         self.free_chargers = Queue()
         for charger in chargers_collection:
@@ -115,17 +116,19 @@ class Environment(Model):
             self.next_generation_time = random.randint(10, 15)
             self.generate_and_queue_article()
 
-        self.task_manager.assign_tasks_to_free_bots()
+        self.task_manager.assign_tasks_to_free_bots_extended_version()
 
-        self.assign_goals_to_bots()
+        self.assign_goals_to_bots_extended_version()
 
-        self.task_manager.manage_bot_movements()
+        #self.task_manager.manage_bot_movements()
 
         self.datacollector.collect(self)
 
         self.schedule.step()
 
         self.running = True
+
+
 
     def add_box_from_map(self, desc: list):
         """
@@ -239,6 +242,7 @@ class Environment(Model):
                         agent.load_q_values(agent.q_file)
                     else:
                         print(f"Archivo ./q_values{agent.target_goal_name}.npy no encontrado. Entrenando agente.")
+                        agent.training_step = 0
                         agent.train()  # Entrenar al agente si no existe el archivo de Q-values
 
                 else:
@@ -259,35 +263,96 @@ class Environment(Model):
                             agent.load_q_values(agent.q_file)
                         else:
                             print(f"Archivo ./q_values{agent.target_goal_name}.npy no encontrado. Entrenando agente.")
+                            agent.training_step = 0
                             agent.train()  # Entrenar al agente si no existe el archivo de Q-values
 
                         #agent.train()
 
+
+    def assign_goals_to_bots_extended_version(self):
+        """
+        Asigna metas a los bots en función de su tarea actual.
+        Si el bot no tiene una meta asignada, se le asigna el origen.
+        Si el bot ya ha llegado al origen, se le asigna el destino.
+        """
+        for agent in self.schedule.agents:
+            if isinstance(agent, Bot) and agent.task:
+                article_id, weight, origin_name, destination_name = agent.task
+
+                # Obtener las coordenadas del origen y destino a partir de los nombres
+                origin_coords = next(((x, y) for (goal_id, x, y, name) in goals_collection if name == origin_name), None)
+                destination_coords = next(((x, y) for (goal_id, x, y, name) in goals_collection if name == destination_name), None)
 
                 '''
-                if origin_coords and destination_coords:
-                    # Asignar el origen como meta inicial si aún no tiene ninguna meta asignada
-                    if agent.target_goal_name == "" and agent.done == False:
-                        if agent.pos == origin_coords:
-                            # Si el bot ya está en el origen, asignar destino
-                            self.task_manager.assign_goal_to_bot(agent.unique_id, destination_name)
-                        else:
-                            # Si no, asignar origen
-                            self.task_manager.assign_goal_to_bot(agent.unique_id, origin_name)
+                if (agent.charger_name == ""):
+                    agent.charger_name = self.free_chargers.get()
+                elif (agent.battery >= 100):
+                    self.free_chargers.put(agent.charger_name)
+                    agent.charger_name = ""
+                '''
+                    
 
-                        self.assign_rewards()
+                if(agent.aux_target != ""):
+                    self.task_manager.assign_goal_to_bot(agent.unique_id, agent.charger_name)
 
-                        # Verificar si el archivo de Q-values existe
-                        if os.path.exists(f"./q_values{agent.target_goal_name}.npy"):
-                            agent.q_file = f"q_values{agent.target_goal_name}.npy"
-                            agent.training_step = agent.MAX_NUM_TRAINING_STEPS  # Evitar entrenamiento adicional
-                            agent.load_q_values(agent.q_file)
-                        else:
-                            print(f"Archivo ./q_values{agent.target_goal_name}.npy no encontrado. Entrenando agente.")
-                            agent.train()  # Entrenar al agente si no existe el archivo de Q-values
+                    self.assign_rewards()
 
-                        #agent.train()
+                    # Verificar si el archivo de Q-values existe
+                    if os.path.exists(f"./q_values{agent.target_goal_name}.npy"):
+                        agent.q_file = f"q_values{agent.target_goal_name}.npy"
+                        agent.training_step = agent.MAX_NUM_TRAINING_STEPS  # Evitar entrenamiento adicional
+                        agent.load_q_values(agent.q_file)
+                    else:
+                        print(f"Archivo ./q_values{agent.target_goal_name}.npy no encontrado. Entrenando agente.")
+                        agent.training_step = 0
+                        agent.train()  # Entrenar al agente si no existe el archivo de Q-values
 
                 else:
-                    print(f"Error: No se encontraron coordenadas para {origin_name} o {destination_name}")
-                '''
+                    # Verificar si el bot está en equipo y si está en las coordenadas del origen
+                    if agent.in_team_mode and agent.pos == origin_coords:
+                        # Buscar el equipo del bot
+                        team_members = next((team for team in self.bot_teams if agent in team), [])
+                        
+                        # Si todos los miembros del equipo están en el origen, asignarles el destino
+                        if all([bot.pos == origin_coords for bot in team_members]):
+                            for bot in team_members:
+                                self.task_manager.assign_goal_to_bot(bot.unique_id, destination_name)
+                            print(f"Equipo con el líder {agent.unique_id} ha llegado al origen. Asignando destino.")
+
+                            self.assign_rewards()
+
+                            # Verificar si el archivo de Q-values existe
+                            if os.path.exists(f"./q_values{agent.target_goal_name}.npy"):
+                                agent.q_file = f"./q_values{agent.target_goal_name}.npy"
+                                agent.training_step = agent.MAX_NUM_TRAINING_STEPS
+                                agent.load_q_values(agent.q_file)
+                            else:
+                                print(f"Archivo ./q_values{agent.target_goal_name}.npy no encontrado. Entrenando agente.")
+                                agent.training_step = 0
+                                agent.train()
+
+                        else:
+                            # Si no, esperar en el origen
+                            print(f"Bot {agent.unique_id} está esperando en el origen para su equipo.")
+                            continue  # No hacer nada hasta que todo el equipo esté en el origen
+                    else:
+                        # Si no está en equipo o no está en el origen, proceder normalmente
+                        if agent.target_goal_name == "" and not agent.done:
+                            if agent.pos == origin_coords:
+                                # Si el bot ya está en el origen, asignar destino
+                                self.task_manager.assign_goal_to_bot(agent.unique_id, destination_name)
+                            else:
+                                # Si no, asignar origen
+                                self.task_manager.assign_goal_to_bot(agent.unique_id, origin_name)
+
+                            self.assign_rewards()
+
+                            # Verificar si el archivo de Q-values existe
+                            if os.path.exists(f"./q_values{agent.target_goal_name}.npy"):
+                                agent.q_file = f"./q_values{agent.target_goal_name}.npy"
+                                agent.training_step = agent.MAX_NUM_TRAINING_STEPS
+                                agent.load_q_values(agent.q_file)
+                            else:
+                                print(f"Archivo ./q_values{agent.target_goal_name}.npy no encontrado. Entrenando agente.")
+                                agent.training_step = 0
+                                agent.train()

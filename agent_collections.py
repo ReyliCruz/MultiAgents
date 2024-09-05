@@ -20,18 +20,18 @@ bots_collection = [
     (101, 26, 8),
     #(102, 27, 8),
     #(103, 28, 8),
-    (104, 25, 8),
-    (105, 24, 8),
-    (106, 23, 8)
+    #(104, 25, 8),
+    #(105, 24, 8),
+    #(106, 23, 8)
 ]
 
 articles_collection = [
-    (201, 20, "Banda", "Rack1"),
-    (202, 10, "Banda", "Salida"),
+    (201, 5, "Banda", "Rack1"),
+    (202, 5, "Banda", "Salida"),
     (203, 5, "Rack1", "Salida"),
-    (204, 10, "Rack2", "Salida"),
+    (204, 5, "Rack2", "Salida"),
     (205, 5, "Rack3", "Salida"),
-    (206, 10, "Rack4", "Cargador1"),
+    (206, 5, "Rack4", "Cargador1"),
     (207, 5, "Banda", "Cargador2"),
     (208, 5, "Rack3", "Salida"),
     #(209, 5, "Salida", "Cargador3"),
