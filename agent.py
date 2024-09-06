@@ -31,9 +31,9 @@ class Bot(Agent):
         self.task = None
         self.q_file = None
         self.history = []
-        self.battery = 999999999999 #100
+        self.battery = 100 #100
         self.weight_box = 0
-        self.low_battery = 35
+        self.low_battery = 50
         self.charger_name = ""
         self.charging = False
         self.in_team_mode = False  # Indica si el bot está en modo equipo
@@ -41,8 +41,12 @@ class Bot(Agent):
         self.path = []
         self.team_formation = False
         self.training = False
+        self.robot_total_path = []
+        self.robot_total_deliverable = 0
+        self.robot_total_stored = 0
+        self.robot_total_battery_cost = 0
 
-        self.epsilon = 1.0 #0.1
+        self.epsilon = 0.1 #0.1
         self.alpha = 0.1
         self.gamma = 0.9
 
@@ -96,6 +100,10 @@ class Bot(Agent):
                         
                         if self.path:
                             self.next_pos = self.path.pop(0)  # Tomar el siguiente paso en el camino
+
+                            if self.next_pos == self.pos:
+                                self.next_pos = (self.next_pos[0], self.next_pos[1] - 1)  # Restar 1 en Y
+
                             self.next_state = self.model.states[self.next_pos]
                             self.action = None  # No es necesario definir acción, ya que estamos siguiendo el camino
                         else:
@@ -106,11 +114,11 @@ class Bot(Agent):
             self.history.append(self.pos)
             if len(self.history) > 10:
                 self.history.pop(0)
-                
+
             if self.detect_oscillation_all_cases():
                 self.action = self.random_policy()
             else:
-                self.action = self.greedy_policy(self.state)
+                self.action = self.eps_greedy_policy(self.state)
 
             #self.action = self.greedy_policy(self.state)
 
@@ -126,10 +134,13 @@ class Bot(Agent):
                 self.charging = False
                 if self.aux_target != "_":
                     self.target_goal_name = self.aux_target
+                else:
+                    self.target_goal_name = ""
                 self.aux_target = ""
                 #self.charger_name = ""
         elif (self.target_goal_name != ""):
             self.battery = self.battery -  (1 + self.weight_box * 0.1)/2
+            self.robot_total_battery_cost += (1 + self.weight_box * 0.1)/2
         
 
     def get_leader_from_team(self):
@@ -222,6 +233,10 @@ class Bot(Agent):
                 elif self.target_goal_name == destination and self.previous_target == origin:
                     self.weight_box = 0
                     self.done = True
+                    if "Salida" in self.target_goal_name:
+                        self.robot_total_deliverable += 1
+                    else:
+                        self.robot_total_stored +=1
                     self.target_goal_name = ""
                     self.previous_target = ""
                     self.task = None
@@ -273,7 +288,7 @@ class Bot(Agent):
 
         all_positions = [(x, y) for x in range(self.model.grid.width) for y in range(self.model.grid.height)]
 
-        for episode in range(2):
+        for episode in range(3):
             self.epsilon = 1.0
             for pos in all_positions:
                 self.training_step = 0
@@ -384,6 +399,8 @@ class Bot(Agent):
             print("File not found. Q-values have been reset.")
 
     def perform(self, pos, action) -> tuple:
+        if action is None:
+            return pos
         x = pos[0] + self.MOVEMENTS[action][0]
         y = pos[1] + self.MOVEMENTS[action][1]
         next_pos = (x, y)
@@ -878,6 +895,7 @@ class TaskManager:
             bot.done = False
             bot.in_team_mode = True
             bot.team_size = team_size
+            bot.aux_target = "_" #Irse a cargar
 
             print(f"Bot {bot.unique_id} asignado a {destination_name}")
 
@@ -886,20 +904,19 @@ class TaskManager:
 
 
     def manage_bot_movements(self):
-        """ Gestiona y coordina los movimientos de los bots para evitar colisiones. """
+        """ Gestiona y coordina los movimientos de los bots para evitar colisiones teniendo en cuenta las próximas posiciones. """
         planned_positions = {}
 
         # Iterar sobre todos los bots en el entorno
         for bot in self.environment.schedule.agents:
             if isinstance(bot, Bot):
-
                 if bot.state is None:
                     bot.state = self.environment.states[bot.pos]
-                    
+
                 # Calcular la próxima posición basada en su acción planificada
                 next_pos = bot.perform(bot.pos, bot.greedy_policy(bot.state))
-                
-                # Si la posición ya está en uso, se detecta una colisión potencial
+
+                # Revisar si ya hay algún bot planeando moverse a esa posición
                 if next_pos in planned_positions:
                     planned_positions[next_pos].append(bot)
                 else:
@@ -908,27 +925,56 @@ class TaskManager:
         # Ajustar movimientos para evitar colisiones
         for pos, bots_in_pos in planned_positions.items():
             if len(bots_in_pos) > 1:
-                # Hay más de un bot planeando moverse a la misma posición
+                # Hay más de un bot planeando moverse a la misma posición, resolver conflicto
+                self.resolve_bot_conflict(bots_in_pos)
 
-                for bot in bots_in_pos:
-                    # Replanificar la acción para cada bot involucrado
-                    bot.action = self.find_alternative_action(bot)
+    def resolve_bot_conflict(self, bots_in_conflict):
+        """
+        Resuelve el conflicto entre los bots que planean moverse a la misma posición.
+        Los bots en equipo no colisionan entre sí, pero los bots individuales deben tomar acciones alternas.
+        """
+        if all(bot.in_team_mode for bot in bots_in_conflict):
+            # Todos los bots están en equipo, no hay necesidad de resolver conflicto entre ellos
+            return
+
+        individual_bots = [bot for bot in bots_in_conflict if not bot.in_team_mode]
+        team_bots = [bot for bot in bots_in_conflict if bot.in_team_mode]
+
+        # Permitir que los bots de equipo mantengan su movimiento
+        for bot in team_bots:
+            bot.next_pos = bot.perform(bot.pos, bot.action)
+
+        # Resolver conflicto para bots individuales
+        if len(individual_bots) > 1:
+            # Asignar movimientos contrarios a los bots individuales para evitar colisiones
+            directions_taken = set()
+            for bot in individual_bots:
+                opposite_action = self.find_alternative_action(bot, directions_taken)
+                if opposite_action is not None:
+                    bot.action = opposite_action
                     bot.next_pos = bot.perform(bot.pos, bot.action)
-                    #print(f"Bot {bot.unique_id} replanificado para moverse a {bot.next_pos}")
+                    directions_taken.add(bot.action)
 
-    def find_alternative_action(self, bot):
-        """ Encuentra una acción alternativa para el bot para evitar colisiones. """
+    def find_alternative_action(self, bot, directions_taken):
+        """
+        Encuentra una acción alternativa para el bot que no choque con otro bot en la siguiente posición.
+        También evita que tome la misma dirección que otros bots en conflicto.
+        """
         possible_actions = list(range(bot.NUM_OF_ACTIONS))
         random.shuffle(possible_actions)  # Aleatorizar las acciones
 
         for action in possible_actions:
+            if action in directions_taken:
+                continue  # Si otro bot ya tomó esta dirección, evitarla
+
             alternative_pos = bot.perform(bot.pos, action)
             # Verificar si la nueva posición alternativa está libre y no es una zona de colisión
             if self.environment.grid.is_cell_empty(alternative_pos) and not self.is_collision_zone(alternative_pos):
                 return action
 
-        # Si no hay alternativas seguras, el bot espera (puede ajustarse según la lógica deseada)
+        # Si no hay alternativas seguras, el bot espera
         return None
+
 
     def is_collision_zone(self, pos):
         """ Verifica si la casilla es una zona de colisión potencial. """

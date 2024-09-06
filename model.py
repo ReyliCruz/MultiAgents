@@ -11,44 +11,10 @@ import numpy as np
 import random
 from queue import Queue
 import os
+import json
 
 
 class Environment(Model):
-    '''
-    DEFAULT_MODEL_DESC_OLD_VERSION = [
-        'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
-        'BBBBBBBBBBBFFBBFBBFBBBBBBFFFFB',
-        'BBBBBBBBBBBFFBBFBBFBBBBBBFFFFB',
-        'BBBBBBBBBBBFFFFFFFFFFBBBBFFFFB',
-        'BBBBBBBBBBBFFFFFFFFFFBBBBFFFFB',
-        'BBBBBBBBBBBFFFFFFFFFFBBBBFFFFB',
-        'BBBBBBBBBBBFFFFFFFFFFBBBBFFFFB',
-        'BBBBBBBBBBBFFFFFFFFFFBBBBFFFFB',
-        'BBBBBBBBBBBFFFFFFBBFFBBBBFFFFB',
-        'BBBBBBBBBBBBBBFFFBBFFFFFFFFFFB',
-        'BBBBBBBBBBBBBBFFFFFFFFFFFFFFFB',
-        'BBBBBBBBBBBBBBFFFBBFBBFFBBFFFB',
-        'BFFFFFFFFFFFFFFFFBBFBBFFBBFFFB',
-        'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
-        'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
-        'BFFFFFFFFFFFFFFFBBBBBBFBBFFFFB',
-        'BFFFFFFFFFFFFFFFBBBBBBFBBFFFFB',
-        'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
-        'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
-        'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
-        'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
-        'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
-        'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
-        'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
-        'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
-        'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
-        'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
-        'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
-        'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
-        'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB'
-    ]
-    '''
-
     DEFAULT_MODEL_DESC = [
         'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
         'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
@@ -59,17 +25,17 @@ class Environment(Model):
         'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
         'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
         'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
-        'BFFFFFFFBBBBBBBBBBBBBBBBBBBBBB',
-        'BFFFFFFFFBBFFFFFFFFFBBBBBBBBBB',
-        'BFFFFFFFFBBFFFFFFFFFBBBBBBBBBB',
-        'BFFFFFFFFFFFFFFFFFFFBBBBBBBBBB',
-        'BFFFFFFFFFFFFFFFFFFFBBBBBBBBBB',
-        'BFFFFFFFFFFFFFFFFFFFBBBBFFFFBB',
-        'BFFFFFFFFFFFFFFFBBFFBBBBFFFFBB',
-        'BFFFFFFFFBBBFFFFBBFFBBBBFFFFBB',
-        'BFFFFFFFFBBBBFFFFFFFFFFFFFFFBB',
-        'BBBBBBBBBBBBBFFFBBFFFFFFFFFFBB', #'BBBBBBBBBBBBBFFFBBFBBFFFFFFFBB',
-        'BBBBBBBBBBFFFFFFBBFBBFFFFFFFBB',
+        'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+        'BBBBBBBBBBBFFFFFFFFFBBBBBBBBBB',
+        'BBBBBBBBBBBFFFFFFFFFBBBBBBBBBB',
+        'BBBBBBBBBBBFFFFFFFFFBBBBBBBBBB',
+        'BBBBBBBBBBBFFFFFFFFFBBBBBBBBBB',
+        'BBBBBBBBBBBFFFFFFFFFBBBBFFFFBB',
+        'BBBBBBBBBBBFFFFFBBFFBBBBFFFFBB',
+        'BBBBBBBBBBBBFFFFBBFFBBBBFFFFBB',
+        'BBBBBBBBBBBBBFFFFFFFFFFFFFFFBB',
+        'BBBBBBBBBBBBBFFFFFFFFFFFFFFFBB', #'BBBBBBBBBBBBBFFFBBFBBFFFFFFFBB',
+        'BBBBBBBBBBBFFFFFBBFFFFFFFFFFBB',
         'BFFFFFFFFFFFFFFFFFFFFFFFFFFFBB',
         'BFFFFFFFFFFFFFFFFFFFFFFFFFFFFB',
         'BFFFFFFFFFFFFFFBBBBBFFFFFFFFFB',
@@ -85,12 +51,18 @@ class Environment(Model):
     def __init__(self, desc=None, q_file=None, train=False):
         super().__init__()
         self._q_file = q_file
+        self.data = {"robots": []}  # Inicialización de la estructura de datos
+        self.steps = 0
 
         self.goal_states = []
         self.articles_queue = Queue()  # Cola para almacenar artículos
         self.time_counter = 0  # Contador de tiempo para extraer artículos
         self.next_generation_time = 1  # Tiempo inicial aleatorio para extraer artículo
         self.bot_teams = []
+        self.total_deliverables = 0
+        self.total_stored = 0
+        self.selected_articles = []
+        self.total_energy_cost = 0
 
         self.free_chargers = Queue()
         for charger in chargers_collection:
@@ -145,11 +117,10 @@ class Environment(Model):
 
     def collect_robot_data(self):
         """Registra la posición actual y la batería de los robots en cada paso."""
-        robots_data = []
-        for agent in self.schedule.agents:
-            if isinstance(agent, Bot):
-                # Si es el primer paso, registrar la posición inicial
-                if len(self.data["robots"]) < len(self.schedule.agents):
+        if self.steps == 0:
+            # Inicializa el JSON solo en el primer paso
+            for agent in self.schedule.agents:
+                if isinstance(agent, Bot):
                     robot_info = {
                         "spawnPosition": {
                             "x": agent.pos[0],
@@ -159,18 +130,32 @@ class Environment(Model):
                     }
                     self.data["robots"].append(robot_info)
 
+        for i, agent in enumerate(self.schedule.agents):
+            if isinstance(agent, Bot):
                 # Registrar el camino y la batería en cada paso
-                robot_path = {
+                robot_step_info = {
                     "x": agent.pos[0],
                     "y": agent.pos[1],
                     "battery": agent.battery
                 }
+                self.data["robots"][i]["path"].append(robot_step_info)
 
-                robots_data.append(robot_path)
+    def update_json(self):
+        """Guarda el archivo JSON con todos los registros cuando la simulación termina."""
+        with open("robot_data.json", "w") as json_file:
+            json.dump(self.data, json_file, indent=4)
 
-        # Agregar los caminos de los robots al json
-        for i, robot_info in enumerate(self.data["robots"]):
-            robot_info["path"].append(robots_data[i])
+    def save_summary_to_json(self):
+        """Guarda un resumen de los datos en un archivo JSON separado."""
+        summary_data = {
+            "total_deliverables": self.total_deliverables,
+            "total_stored": self.total_stored,
+            "total_energy_cost": self.total_energy_cost,
+            "steps": self.steps
+        }
+
+        with open("simulation_summary.json", "w") as summary_file:
+            json.dump(summary_data, summary_file, indent=4)
 
     def step(self):
         self.time_counter += 1
@@ -178,7 +163,7 @@ class Environment(Model):
         if self.time_counter >= self.next_generation_time:
             self.time_counter = 0
             self.next_generation_time = random.randint(10, 15)
-            self.generate_and_queue_article()
+            self.generate_and_queue_article_extended_version()
 
         self.task_manager.assign_tasks_to_free_bots_extended_version()
 
@@ -189,9 +174,41 @@ class Environment(Model):
         self.datacollector.collect(self)
 
         self.schedule.step()
+        
+        
+        self.collect_robot_data()  # Colectar los datos de los robots
+
+        self.steps += 1
+        
+        total_deliverables = 0
+        total_stored = 0
+        total_energy_cost = 0
+        for agent in self.schedule.agents:
+            if isinstance(agent, Bot):  
+                total_deliverables += agent.robot_total_deliverable
+                total_stored += agent.robot_total_stored
+                total_energy_cost += agent.robot_total_battery_cost
+
 
         self.running = True
 
+        
+        # Verificar si se ha alcanzado el paso máximo (100)
+        if total_deliverables >= 10:
+            print("Pedidos entregados, fin de la simulación.")
+            self.total_deliverables = total_deliverables
+            self.total_stored = total_stored
+            self.total_energy_cost = total_energy_cost
+            self.steps = self.steps
+
+            self.update_json()    # Guardar los datos en el archivo JSON
+            self.save_summary_to_json()
+            self.running = False  # Detener la simulación
+
+        # Asegurar que la simulación continúe corriendo si no ha terminado
+        else:
+            self.running = True
+        
 
 
     def add_box_from_map(self, desc: list):
@@ -269,7 +286,52 @@ class Environment(Model):
         if articles_collection:
             # Seleccionar un artículo aleatorio de la colección
             article = random.choice(articles_collection)
+            self.selected_articles.append(article)
             self.articles_queue.put(article)  # Agregar el artículo a la cola
+            
+    def generate_and_queue_article_extended_version(self):
+        """Genera un artículo aleatorio de la colección y lo agrega a la cola si tanto el origen como el destino no están asignados."""
+        if articles_collection:
+            while True:  # Bucle hasta encontrar un artículo con origen y destino nuevos
+                # Seleccionar un artículo aleatorio de la colección
+                article = random.choice(articles_collection)
+                article_id, weight, origin_name, destination_name = article
+
+                # Obtener las coordenadas del origen y destino
+                origin_coords = next(((x, y) for (goal_id, x, y, name) in goals_collection if name == origin_name), None)
+                destination_coords = next(((x, y) for (goal_id, x, y, name) in goals_collection if name == destination_name), None)
+
+
+                # Verificar si el origen o destino ya están asignados a algún bot
+                origin_in_use = False
+                destination_in_use = False
+                
+                for agent in self.schedule.agents:
+                    if isinstance(agent, Bot):
+                        # Verificar si el bot tiene asignado el mismo origen o destino
+                        if agent.target_goal_name == origin_name or agent.target_goal_name == destination_name:
+                            origin_in_use = True
+                            destination_in_use = True
+                            break  # Si ya está asignado, no es necesario verificar más
+
+                        # Verificar si algún bot está físicamente en el origen o destino
+                        if agent.pos == origin_coords:
+                            origin_in_use = True
+                            break
+                        if agent.pos == destination_coords:
+                            destination_in_use = True
+                            break
+
+                # Si tanto el origen como el destino están libres, agregar el artículo a la cola
+                if not origin_in_use and not destination_in_use:
+                    self.selected_articles.append(article)
+                    self.articles_queue.put(article)  # Agregar el artículo a la cola
+                    print(f"Artículo {article_id} generado y asignado: origen {origin_name}, destino {destination_name}")
+                    break  # Salir del bucle cuando se encuentra un artículo válido
+                else:
+                    print(f"Artículo {article_id} descartado: origen {origin_name}, destino {destination_name} ya están en uso.")
+                    break
+
 
     def assign_goals_to_bots(self):
         """
@@ -409,6 +471,21 @@ class Environment(Model):
                                 # Si no, asignar origen
                                 self.task_manager.assign_goal_to_bot(agent.unique_id, origin_name)
 
+                            self.assign_rewards()
+
+                            # Verificar si el archivo de Q-values existe
+                            if os.path.exists(f"./q_values{agent.target_goal_name}.npy"):
+                                agent.q_file = f"./q_values{agent.target_goal_name}.npy"
+                                agent.training_step = agent.MAX_NUM_TRAINING_STEPS
+                                agent.load_q_values(agent.q_file)
+                            else:
+                                print(f"Archivo ./q_values{agent.target_goal_name}.npy no encontrado. Entrenando agente.")
+                                agent.training_step = 0
+                                agent.train()
+                        
+                        elif agent.target_goal_name != "" and agent.battery >= 95:
+                            self.task_manager.assign_goal_to_bot(agent.unique_id, agent.target_goal_name)
+                            
                             self.assign_rewards()
 
                             # Verificar si el archivo de Q-values existe

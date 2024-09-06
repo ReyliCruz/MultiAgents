@@ -3,6 +3,7 @@ from flask_cors import CORS
 import subprocess
 import os
 import signal
+import json
 
 app = Flask(__name__)
 CORS(app)
@@ -50,104 +51,28 @@ def step_simulation():
 @app.route('/get-points', methods=['GET'])
 def get_points():
     try:
-        data = {
-            "robots": [
-                {
-                    "spawnPosition": {
-                        "x": 0,
-                        "y": 0
-                    },
-                    "path": [
-                        {
-                        "x": 1,
-                        "y": 9
-                        },
-                        {
-                        "x": 1,
-                        "y": 2
-                        },
-                        {
-                        "x": 7,
-                        "y": 2
-                        },
-                        {
-                        "x": 7,
-                        "y": 9
-                        },
-                        {
-                        "x": 9,
-                        "y": 1
-                        },
-                        {
-                        "x": 9,
-                        "y": 5
-                        },
-                        {
-                        "x": 5,
-                        "y": 6
-                        },
-                        {
-                        "x": 6,
-                        "y": 6
-                        },
-                        {
-                        "x": 6,
-                        "y": 7
-                        }
-                    ]
-                },
-
-                {
-                    "spawnPosition": {
-                        "x": 1,
-                        "y": 1
-                    },
-                    "path": [
-                        {
-                        "x": 2,
-                        "y": 10
-                        },
-                        {
-                        "x": 2,
-                        "y": 3
-                        },
-                        {
-                        "x": 8,
-                        "y": 3
-                        },
-                        {
-                        "x": 8,
-                        "y": 10
-                        },
-                        {
-                        "x": 10,
-                        "y": 2
-                        },
-                        {
-                        "x": 10,
-                        "y": 6
-                        },
-                        {
-                        "x": 6,
-                        "y": 7
-                        },
-                        {
-                        "x": 7,
-                        "y": 7
-                        },
-                        {
-                        "x": 7,
-                        "y": 8
-                        }
-                    ]
-                }
-            ]
-        }
+        # Abre y lee el archivo JSON local
+        with open('robot_data.json', 'r') as json_file:
+            data = json.load(json_file)  # Carga el contenido del archivo en la variable 'data'
+        
+        # Devuelve el contenido del archivo JSON
         return jsonify(data), 200
     except Exception as e:
+        # Si ocurre algún error, lo capturamos y devolvemos un mensaje de error
         return jsonify({"status": "Error", "message": str(e)}), 500
     
-    
+@app.route('/get-summary', methods=['GET'])
+def get_points():
+    try:
+        # Abre y lee el archivo JSON local
+        with open('"simulation_summary.json"', 'r') as json_file:
+            data = json.load(json_file)  # Carga el contenido del archivo en la variable 'data'
+        
+        # Devuelve el contenido del archivo JSON
+        return jsonify(data), 200
+    except Exception as e:
+        # Si ocurre algún error, lo capturamos y devolvemos un mensaje de error
+        return jsonify({"status": "Error", "message": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
