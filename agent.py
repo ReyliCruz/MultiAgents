@@ -118,7 +118,7 @@ class Bot(Agent):
             if self.detect_oscillation_all_cases():
                 self.action = self.random_policy()
             else:
-                self.action = self.eps_greedy_policy(self.state)
+                self.action = self.greedy_policy(self.state)
 
             #self.action = self.greedy_policy(self.state)
 
@@ -231,6 +231,13 @@ class Bot(Agent):
 
                 # Verificar si el bot ha llegado al `destination`
                 elif self.target_goal_name == destination and self.previous_target == origin:
+                    '''
+                    # Eliminar el artículo completado de la lista `selected_articles`
+                    article_to_remove = (article_id, weight, origin, destination)
+                    if article_to_remove in self.model.selected_articles:
+                        self.model.selected_articles.remove(article_to_remove)
+                    '''
+
                     self.weight_box = 0
                     self.done = True
                     if "Salida" in self.target_goal_name:

@@ -57,7 +57,7 @@ class Environment(Model):
         self.goal_states = []
         self.articles_queue = Queue()  # Cola para almacenar artículos
         self.time_counter = 0  # Contador de tiempo para extraer artículos
-        self.next_generation_time = 1  # Tiempo inicial aleatorio para extraer artículo
+        self.next_generation_time = random.randint(10, 15)  # Tiempo inicial aleatorio para extraer artículo
         self.bot_teams = []
         self.total_deliverables = 0
         self.total_stored = 0
@@ -158,6 +158,34 @@ class Environment(Model):
             json.dump(summary_data, summary_file, indent=4)
 
     def step(self):
+        self.collect_robot_data()
+        
+        total_deliverables = 0
+        total_stored = 0
+        total_energy_cost = 0
+        for agent in self.schedule.agents:
+            if isinstance(agent, Bot):  
+                total_deliverables += agent.robot_total_deliverable
+                total_stored += agent.robot_total_stored
+                total_energy_cost += agent.robot_total_battery_cost
+
+        # Verificar si se ha alcanzado el paso máximo (100)
+        if total_deliverables >= 10:
+            print("Pedidos entregados, fin de la simulación.")
+            self.total_deliverables = total_deliverables
+            self.total_stored = total_stored
+            self.total_energy_cost = total_energy_cost
+            self.steps = self.steps
+
+            self.update_json()    # Guardar los datos en el archivo JSON
+            self.save_summary_to_json()
+            self.running = False  # Detener la simulación
+
+        # Asegurar que la simulación continúe corriendo si no ha terminado
+        else:
+            self.running = True
+
+
         self.time_counter += 1
 
         if self.time_counter >= self.next_generation_time:
@@ -175,11 +203,11 @@ class Environment(Model):
 
         self.schedule.step()
         
+        #self.collect_robot_data()  # Colectar los datos de los robots
         
-        self.collect_robot_data()  # Colectar los datos de los robots
-
         self.steps += 1
         
+        '''
         total_deliverables = 0
         total_stored = 0
         total_energy_cost = 0
@@ -188,11 +216,11 @@ class Environment(Model):
                 total_deliverables += agent.robot_total_deliverable
                 total_stored += agent.robot_total_stored
                 total_energy_cost += agent.robot_total_battery_cost
+        '''
 
+        #self.running = True
 
-        self.running = True
-
-        
+        '''
         # Verificar si se ha alcanzado el paso máximo (100)
         if total_deliverables >= 10:
             print("Pedidos entregados, fin de la simulación.")
@@ -208,7 +236,7 @@ class Environment(Model):
         # Asegurar que la simulación continúe corriendo si no ha terminado
         else:
             self.running = True
-        
+        '''
 
 
     def add_box_from_map(self, desc: list):

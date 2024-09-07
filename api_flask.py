@@ -62,7 +62,7 @@ def get_points():
         return jsonify({"status": "Error", "message": str(e)}), 500
     
 @app.route('/get-summary', methods=['GET'])
-def get_points():
+def get_summary():
     try:
         # Abre y lee el archivo JSON local
         with open('"simulation_summary.json"', 'r') as json_file:

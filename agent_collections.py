@@ -59,8 +59,8 @@ bots_collection = [
 
 articles_collection = [
     (201, 10, "Banda0", "Salida4"),
-    (201, 20, "Banda0", "Salida4"),
-    (201, 40, "Banda0", "Salida4"),
+    #(201, 20, "Banda0", "Salida4"),
+    #(201, 40, "Banda0", "Salida4"),
     (202, 5, "Rack1", "Salida1"),
     (203, 2, "Rack2", "Salida2"),
     (204, 3, "Rack3", "Salida3"),
